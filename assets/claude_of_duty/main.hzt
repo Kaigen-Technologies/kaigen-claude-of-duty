@@ -1,0 +1,8 @@
+type SceneBlobAsset
+version 11
+---
+scene_dir "claude_of_duty/main"
+chunks 1
+  chunk "claude_of_duty/main/chunk_0.hzt" EntityChunkBlobAsset
+  bounds_min -128.000000 -2.000000 -128.000000
+  bounds_max 128.000000 10.000000 128.000000

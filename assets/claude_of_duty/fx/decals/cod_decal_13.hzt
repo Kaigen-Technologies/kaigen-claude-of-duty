@@ -1,0 +1,11 @@
+type TextureBlobAsset
+version 23
+---
+image "/claude_of_duty/fx/decals/cod_decal_13" u8
+format TEX_FORMAT_BC7
+width 0
+height 0
+is_srgb true
+has_alpha true
+has_alpha_cutoff true
+max_size 0

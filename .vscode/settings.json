@@ -1,0 +1,36 @@
+{
+  "clangd.arguments": [
+    "--compile-commands-dir=${workspaceFolder}",
+    "--background-index",
+    "--clang-tidy=false",
+    "--header-insertion=never",
+    "--pch-storage=memory"
+  ],
+  "C_Cpp.intelliSenseEngine": "disabled",
+  "C_Cpp.autocomplete": "disabled",
+  "C_Cpp.errorSquiggles": "disabled",
+  "files.associations": {
+    "*.glsl": "glsl",
+    "*.h": "c",
+    "*.c": "c",
+    "*.hzt": "yaml"
+  },
+  "[c]": {
+    "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
+  },
+  "files.exclude": {
+    "**/.DS_Store": true,
+    "out": true,
+    "cooked": true,
+    "logs": true,
+    "crashes": true
+  },
+  "search.exclude": {
+    "out": true,
+    "cooked": true,
+    "logs": true,
+    "crashes": true,
+    "compile_commands.json": true,
+    "hz": true
+  }
+}

@@ -1,0 +1,68 @@
+type MaterialBlobAsset
+version 23
+---
+shader_source "/shaders/renderer/standard.glsl" ShaderVariantBlobAsset
+depth_test true
+depth_write false
+depth_compare GPU_COMPARE_GREATER_EQUAL
+cull_mode GPU_CULL_NONE
+is_transparent true
+alpha_cutoff false
+alpha_to_coverage false
+blend
+  enabled true
+  src_factor GPU_BLEND_SRC_ALPHA
+  dst_factor GPU_BLEND_ONE
+  op GPU_BLEND_OP_ADD
+  src_factor_alpha GPU_BLEND_ZERO
+  dst_factor_alpha GPU_BLEND_ONE
+  op_alpha GPU_BLEND_OP_ADD
+depth_bias 0.000000
+slope_scaled_depth_bias 0.000000
+properties 8
+  name "color"
+  type MAT_PROP_COLOR4
+  c4
+    r 0.000000
+    g 0.000000
+    b 0.000000
+    a 1.000000
+
+  name "metallic"
+  type MAT_PROP_FLOAT
+  f 0.000000
+
+  name "smoothness"
+  type MAT_PROP_FLOAT
+  f 0.000000
+
+  name "emission_color"
+  type MAT_PROP_COLOR4
+  c4
+    r 1.000000
+    g 0.070000
+    b 0.010000
+    a 1.000000
+
+  name "emission_intensity"
+  type MAT_PROP_FLOAT
+  f 2000.000000
+
+  name "albedo"
+  type MAT_PROP_TEXTURE
+  texture "" TextureBlobAsset
+
+  name "normal_map"
+  type MAT_PROP_TEXTURE
+  texture "" TextureBlobAsset
+
+  name "orm_map"
+  type MAT_PROP_TEXTURE
+  texture "" TextureBlobAsset
+keywords 2
+  name "HZ_RENDERER_TRANSPARENT"
+  value ""
+
+  name "HZ_RENDERER_DOUBLE_SIDED"
+  value ""
+passes 0

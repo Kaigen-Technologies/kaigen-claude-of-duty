@@ -1,0 +1,50 @@
+type MaterialBlobAsset
+version 23
+---
+shader_source "/shaders/claude_of_duty/cod_surface.glsl" ShaderVariantBlobAsset
+depth_test true
+depth_write false
+depth_compare GPU_COMPARE_GREATER_EQUAL
+cull_mode GPU_CULL_NONE
+is_transparent true
+alpha_cutoff false
+alpha_to_coverage false
+blend
+  enabled true
+  src_factor GPU_BLEND_SRC_ALPHA
+  dst_factor GPU_BLEND_ONE_MINUS_SRC_ALPHA
+  op GPU_BLEND_OP_ADD
+  src_factor_alpha GPU_BLEND_ONE
+  dst_factor_alpha GPU_BLEND_ONE_MINUS_SRC_ALPHA
+  op_alpha GPU_BLEND_OP_ADD
+depth_bias 0.000000
+slope_scaled_depth_bias 0.000000
+properties 0
+keywords 9
+  name "HZ_RENDERER_SHADOWS"
+  value ""
+
+  name "HZ_RENDERER_LIGHTING_CLUSTERS"
+  value ""
+
+  name "HZ_RENDERER_IBL"
+  value ""
+
+  name "HZ_RENDERER_GTAO"
+  value ""
+
+  name "HZ_RENDERER_FOG"
+  value ""
+
+  name "HZ_RENDERER_DECALS"
+  value ""
+
+  name "HZ_RENDERER_DOUBLE_SIDED"
+  value ""
+
+  name "HZ_RENDERER_TRANSPARENT"
+  value ""
+
+  name "COD_TRIPLANAR"
+  value ""
+passes 0

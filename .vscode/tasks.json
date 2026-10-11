@@ -1,0 +1,59 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "hz: Build & Run",
+      "type": "process",
+      "command": "hz/hzbuild",
+      "args": ["macos", "run"],
+      "windows": { "command": "hz\\hzbuild.exe", "args": ["windows", "run"] },
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": { "kind": "build", "isDefault": true },
+      "problemMatcher": ["$gcc"],
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+    },
+    {
+      "label": "hz: Build",
+      "type": "process",
+      "command": "hz/hzbuild",
+      "args": ["macos"],
+      "windows": { "command": "hz\\hzbuild.exe", "args": ["windows"] },
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "problemMatcher": ["$gcc"],
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+    },
+    {
+      "label": "hz: Build Shaders",
+      "type": "process",
+      "command": "hz/hzbuild",
+      "args": ["shaders"],
+      "windows": { "command": "hz\\hzbuild.exe", "args": ["shaders"] },
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "problemMatcher": ["$gcc"],
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+    },
+    {
+      "label": "hz: Cook Assets",
+      "type": "process",
+      "command": "hz/hzbuild",
+      "args": ["cook"],
+      "windows": { "command": "hz\\hzbuild.exe", "args": ["cook"] },
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+    },
+    {
+      "label": "hz: Clean",
+      "type": "process",
+      "command": "hz/hzbuild",
+      "args": ["clean"],
+      "windows": { "command": "hz\\hzbuild.exe", "args": ["clean"] },
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "shared", "clear": true }
+    }
+  ]
+}

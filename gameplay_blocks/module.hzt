@@ -1,0 +1,10 @@
+type HzModuleConfig
+version 1
+---
+name gameplay_blocks
+description "ready-made game mechanics: character controller, camera rigs, camera shake, touch triggers, zones, world-space UI, VFX"
+engine 0.5.0
+src_roots 1 src
+asset_roots 1 assets
+test_roots 1 tests
+wiki wiki/index.md

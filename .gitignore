@@ -1,0 +1,16 @@
+out/
+cooked/
+src/generated/
+logs/
+crashes/
+# editor caches (thumbnails)
+.hz/
+window.dat
+compile_commands.json
+node_modules/
+# machine-local link to this developer's engine
+hz
+.DS_Store
+*.dSYM/
+.cache
+*.log

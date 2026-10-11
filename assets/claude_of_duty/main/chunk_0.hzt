@@ -1,0 +1,134 @@
+type EntityChunkBlobAsset
+version 11
+---
+entity 7300000000000007920
+
+component SceneEntityTag
+  _ 0
+
+component EntityName
+  name "Settings"
+
+component EcsSceneSettings
+  ambient_color
+    r 0.571000
+    g 0.723000
+    b 0.913000
+    a 1.000000
+  ambient_intensity 11796.48
+  shadow_color
+    r 0.000000
+    g 0.000000
+    b 0.000000
+    a 0.000000
+  max_shadow_distance 80.000000
+  env_intensity 0.000000
+  skybox false
+  fog_mode RENDERER_FOG_EXP2
+  fog_color
+    r 0.800000
+    g 0.880000
+    b 0.950000
+    a 1.000000
+  fog_density 0.012000
+  fog_start 0.000000
+  fog_end 0.000000
+  clear_color
+    r 0.571000
+    g 0.723000
+    b 0.913000
+    a 1.000000
+
+component EcsPostProcessing
+  exposure 1.000000
+  tonemap_mode TONEMAP_ACES
+  color_filter
+    r 1.000000
+    g 1.000000
+    b 1.000000
+    a 1.000000
+  vignette_color
+    r 0.000000
+    g 0.000000
+    b 0.000000
+    a 1.000000
+  vignette_center
+    x 0.500000
+    y 0.500000
+  vignette_intensity 0.000000
+  vignette_smoothness 0.200000
+  vignette_rounded true
+  bloom_intensity 0.000000
+  bloom_threshold 0.977000
+  bloom_scatter 0.550000
+  bloom_clamp 65472.000000
+  bloom_tint
+    r 1.000000
+    g 1.000000
+    b 1.000000
+    a 1.000000
+  vignette_mode VIGNETTE_POST_TONEMAP
+  vignette_inner 0.360000
+  vignette_outer 1.000000
+  chromatic_aberration 0.000000
+  grain 0.000000
+
+component EcsStableId
+  id 7300000000000007920
+
+entity 7300000000000015839
+
+component SceneEntityTag
+  _ 0
+
+component EntityName
+  name "Sun"
+
+component LocalTransform
+  position
+    x 0.000000
+    y 60.000000
+    z 0.000000
+  rotation
+    x 0.457154
+    y 0.246160
+    z 0.000000
+    w 0.854643
+  scale
+    x 1.000000
+    y 1.000000
+    z 1.000000
+
+component EcsDirectionalLight
+  color
+    r 1.000000
+    g 0.855000
+    b 0.708000
+    a 1.000000
+  intensity 117356.3
+  cast_shadow true
+  shadow_strength 1.000000
+  shadow_bias 0.000000
+  shadow_normal_bias 0.000000
+  source_angle_deg 0.530000
+
+component DayNightCycle
+  time_of_day 16.500000
+  day_length 0.000000
+  paused true
+  latitude_deg 45.000000
+  day_of_year 172.000000
+  north_yaw_deg 0.000000
+  moon_phase 0.327800
+  night_exposure 0.000000
+  light_step_deg 0.250000
+  no_shadows false
+  physical_sun_illuminance 128000.000000
+  physical_moon_illuminance 7500.000000
+  physical_stars_luminance 0.000000
+  moon_declination_fixed true
+  moon_declination_deg 28.000000
+
+component EcsStableId
+  id 7300000000000015839
+

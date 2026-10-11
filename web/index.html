@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Claude of Duty: Kaigen vs three.js — Kaigen Engine</title>
+<meta name="description" content="A procedural first-person shooter, the same game running on Kaigen Engine and on three.js. Switch engines and compare, in your browser.">
+<link rel="canonical" href="https://kaigen3d.com/demos/claude-of-duty/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Claude of Duty: Kaigen vs three.js — Kaigen Engine">
+<meta property="og:description" content="A procedural first-person shooter, the same game on Kaigen Engine and on three.js. Switch engines and compare, in your browser.">
+<meta property="og:url" content="https://kaigen3d.com/demos/claude-of-duty/">
+<meta property="og:image" content="https://kaigen3d.com/demos/claude-of-duty/poster.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Claude of Duty: Kaigen vs three.js — Kaigen Engine">
+<meta name="twitter:description" content="The same game on Kaigen Engine and on three.js. Switch engines and compare, in your browser.">
+<meta name="twitter:image" content="https://kaigen3d.com/demos/claude-of-duty/poster.jpg">
+<meta name="theme-color" content="#07080a">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #07080a; color: #f2f4f8; overflow: hidden; }
+  body { font: 400 14px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  #canvas { display: block; width: 100vw; height: 100vh; outline: none; }
+
+  /* Overlays the canvas rather than replacing it: the canvas must keep its
+     real size from the first frame or the swapchain is created 0x0. */
+  #status {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    text-align: center;
+    padding: 24px;
+    background: #07080a;
+  }
+
+  #status[hidden] { display: none; }
+
+  .spark {
+    width: 9px;
+    height: 9px;
+    background: #E551BA;
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+
+  .msg { color: #8a91a1; letter-spacing: .04em; max-width: 420px; text-wrap: pretty; }
+  .msg strong { color: #f2f4f8; font-weight: 600; display: block; margin-bottom: 6px; }
+  .msg a { color: #E551BA; }
+
+  @media (prefers-reduced-motion: reduce) { .spark { animation: none; } }
+
+  .glass {
+    background: rgba(10, 12, 16, .72);
+    border: 1px solid rgba(255, 255, 255, .14);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
+  }
+  .mark {
+    width: 34px;
+    height: 34px;
+    flex: none;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+  }
+  .mark img, .mark svg { width: 20px; height: 20px; display: block; }
+  .mark.kaigen {
+    background: radial-gradient(circle at 30% 25%, #2a1f3d, #120f1a 70%);
+    box-shadow: inset 0 0 0 1px rgba(229, 81, 186, .45);
+  }
+  .mark.threejs {
+    background: radial-gradient(circle at 30% 25%, #2b2f38, #121418 70%);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .3);
+    color: #f2f4f8;
+  }
+  .mark.threejs svg { width: 20px; height: 20px; }
+
+  /* three.js runs its own page, the original as built; the overlays above stay on top of it */
+  #threejs { position: fixed; inset: 0; width: 100vw; height: 100vh; border: 0; display: block; background: #000; }
+
+  /* "Made with Kaigen": a real link over the canvas; the game's input listeners sit on the canvas, not here */
+  #kaigen {
+    position: fixed;
+    top: max(12px, env(safe-area-inset-top));
+    right: max(12px, env(safe-area-inset-right));
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 44px;
+    padding: 4px 16px 4px 4px;
+    border-radius: 999px;
+    color: #f2f4f8;
+    font: 500 13px/1 ui-monospace, "SF Mono", Menlo, monospace;
+    letter-spacing: .02em;
+    text-decoration: none;
+    transition: border-color .2s ease, background .2s ease, box-shadow .2s ease;
+  }
+  #kaigen:hover, #kaigen:focus-visible {
+    background: rgba(18, 20, 28, .86);
+    border-color: rgba(229, 81, 186, .7);
+    box-shadow: 0 0 22px rgba(229, 81, 186, .35);
+    outline: none;
+  }
+  #kaigen b { color: #E551BA; font-weight: 700; }
+  #kaigen .arrow { opacity: .7; }
+
+  /* Engine switcher: the running engine's mark (plus a label on wide screens), opening upward */
+  #engine {
+    position: fixed;
+    left: max(16px, env(safe-area-inset-left));
+    bottom: max(16px, env(safe-area-inset-bottom));
+    z-index: 2;
+  }
+  #engine-button {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: 52px;
+    padding: 4px 16px 4px 4px;
+    border-radius: 999px;
+    cursor: pointer;
+    color: #f2f4f8;
+    font: 500 14px/1 ui-monospace, "SF Mono", Menlo, monospace;
+    letter-spacing: .02em;
+    transition: border-color .2s ease, background .2s ease, box-shadow .2s ease;
+  }
+  #engine-button .mark { width: 42px; height: 42px; }
+  #engine-button .mark img, #engine-button .mark svg { width: 24px; height: 24px; }
+  #engine-button .name { color: #E551BA; font-weight: 700; }
+  #engine-button .chevron { width: 16px; height: 16px; opacity: .8; }
+  #engine-button:hover, #engine-button:focus-visible, #engine-button[aria-expanded="true"] {
+    background: rgba(18, 20, 28, .86);
+    border-color: rgba(229, 81, 186, .7);
+    box-shadow: 0 0 22px rgba(229, 81, 186, .35);
+    outline: none;
+  }
+  /* pulses until first opened: an expanding ring, so the button itself never moves */
+  #engine-button.pulse::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    border: 2px solid #E551BA;
+    pointer-events: none;
+    animation: ring 1.8s ease-out infinite;
+  }
+  @keyframes ring {
+    0% { opacity: .9; transform: scale(1); }
+    100% { opacity: 0; transform: scale(1.35, 1.6); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #engine-button.pulse::after { animation: none; opacity: .9; }
+  }
+  #engine-menu {
+    position: absolute;
+    left: 0;
+    bottom: 62px;
+    min-width: 200px;
+    padding: 6px;
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  #engine-menu[hidden] { display: none; }
+  #engine-menu .label {
+    padding: 6px 10px 4px;
+    color: #8a91a1;
+    font-size: 11px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  #engine-menu a {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 12px 5px 5px;
+    border-radius: 999px;
+    color: #f2f4f8;
+    font: 500 13px/1 ui-monospace, "SF Mono", Menlo, monospace;
+    text-decoration: none;
+  }
+  #engine-menu a:hover, #engine-menu a:focus-visible { background: rgba(255, 255, 255, .08); outline: none; }
+  #engine-menu a .check { margin-left: auto; color: #E551BA; visibility: hidden; }
+  #engine-menu a[aria-checked="true"] .check { visibility: visible; }
+
+  /* phones: the icon alone; the game's fish bar (boids_controls_draw: 16 + 72 tall) spans the width, sit above it */
+  @media (pointer: coarse), (max-width: 720px) {
+    #kaigen { padding: 4px; gap: 0; }
+    #kaigen .label { display: none; }
+    #engine { bottom: calc(max(16px, env(safe-area-inset-bottom)) + 84px); }
+    #engine-button { width: 52px; padding: 0; justify-content: center; }
+    #engine-button .label, #engine-button .chevron { display: none; }
+    #engine-button.pulse::after { inset: -1px; }
+    @keyframes ring {
+      0% { opacity: .9; transform: scale(1); }
+      100% { opacity: 0; transform: scale(1.6); }
+    }
+  }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+<div id="status"><div class="spark"></div><p class="msg">Loading the engine…</p></div>
+
+<a id="kaigen" class="glass" href="https://kaigen3d.com/?utm_source=demo&amp;utm_campaign=claude-of-duty" target="_blank" rel="noopener" aria-label="Made with Kaigen. Open kaigen3d.com in a new tab">
+  <span class="mark kaigen"><img alt="" width="20" height="20" src="data:image/webp;base64,UklGRu4CAABXRUJQVlA4TOICAAAvX4AXEDXIkmS7bhvsf9HskkmDF9D5zAM3QhIk2aZtrXi2bdsj27Zt2xjZtm3btv1t49neENxIUiS5MqXaY76BH5w/AgcZhkZ34QWDxdmKN90SYOVWoCvoZxygSgVH9KPtDbpQiKS4gaIhkOEJioZo0raHKhEqRZO2AzSJVQPNxhKy8LY5RFMAxmTgILkHwffbZmbQ8VejTcvv0WPhHmNsYWyHTYuXMlzGoMo44769RqB+NfuIauOI6ea/pDqgMmyGoOr4QGgrpu7emXrCZQQq84fkVtKgd1aQ3YiYq9cRRxhbKSjwBt29W1jY2Q84AQislOmABITM1OsHywEBUOEyV69vDAcEsEDE2NJzE3hjql5fGJ4IPrmql+aACF4k2FhoBiekldQbwgQCum6qDeGJ8wBkJkrv9dMUplANOExdld5RCkc0zznwVFSem8KNQPD4l2PhvSlcCf91TE3EyvwX8dMU/vGfHLLj0+dl2hCezFAH04MZsb78KvUBGZyZ4fl6PEpMjjfuHnsCJxakkEdU+ZgwsdZh47NH8OCPFRlUC8HBV4cPfnAEXzd5i4bow3k5HhPnzf0qTrhekKLbhQIMExfQtQV19zMxuo3g+n0KyNMR1JOAHG0Kx3Pn+/jLN1tztC5kN4aPfb7m8CT0fmt2ul9zQYz2hdg5EionA1xBjJZx8PgAlXJBDK/Q8e2uBaRwx9IAVE6INuYHVE8IT90LyeCLqZVcEMErEnqW1ojjajSYdK0l4rwGnQYvK4lwkKlYSoJHUt6YhKKklaG7mqQViZaaqBWTvoq4lB1kSjykpOwgkOBuITD2puzAWwn3vaueN7uy9f2gUuFlbh5xK7kwtl4++2TqJWJXAuM78QbdgNe4qofjgM0pX/eGxddFOUbg7U75uvqFVY5/LAecb8QrNANOYXVUu0rEesDZHdFGTJwjsnRfBgZFOQZMvI0FA3QHfGHg/Uz5px3e6yA5A/4wmgM="></span>
+  <span class="label">Made with <b>Kaigen</b> <span class="arrow">&#8599;</span></span>
+</a>
+
+<div id="engine">
+  <div id="engine-menu" class="glass" role="menu" aria-label="Engine" hidden>
+    <p class="label">Run on</p>
+    <a role="menuitemradio" data-engine="kaigen" aria-checked="false">
+      <span class="mark kaigen"><img alt="" width="20" height="20" src="data:image/webp;base64,UklGRu4CAABXRUJQVlA4TOICAAAvX4AXEDXIkmS7bhvsf9HskkmDF9D5zAM3QhIk2aZtrXi2bdsj27Zt2xjZtm3btv1t49neENxIUiS5MqXaY76BH5w/AgcZhkZ34QWDxdmKN90SYOVWoCvoZxygSgVH9KPtDbpQiKS4gaIhkOEJioZo0raHKhEqRZO2AzSJVQPNxhKy8LY5RFMAxmTgILkHwffbZmbQ8VejTcvv0WPhHmNsYWyHTYuXMlzGoMo44769RqB+NfuIauOI6ea/pDqgMmyGoOr4QGgrpu7emXrCZQQq84fkVtKgd1aQ3YiYq9cRRxhbKSjwBt29W1jY2Q84AQislOmABITM1OsHywEBUOEyV69vDAcEsEDE2NJzE3hjql5fGJ4IPrmql+aACF4k2FhoBiekldQbwgQCum6qDeGJ8wBkJkrv9dMUplANOExdld5RCkc0zznwVFSem8KNQPD4l2PhvSlcCf91TE3EyvwX8dMU/vGfHLLj0+dl2hCezFAH04MZsb78KvUBGZyZ4fl6PEpMjjfuHnsCJxakkEdU+ZgwsdZh47NH8OCPFRlUC8HBV4cPfnAEXzd5i4bow3k5HhPnzf0qTrhekKLbhQIMExfQtQV19zMxuo3g+n0KyNMR1JOAHG0Kx3Pn+/jLN1tztC5kN4aPfb7m8CT0fmt2ul9zQYz2hdg5EionA1xBjJZx8PgAlXJBDK/Q8e2uBaRwx9IAVE6INuYHVE8IT90LyeCLqZVcEMErEnqW1ojjajSYdK0l4rwGnQYvK4lwkKlYSoJHUt6YhKKklaG7mqQViZaaqBWTvoq4lB1kSjykpOwgkOBuITD2puzAWwn3vaueN7uy9f2gUuFlbh5xK7kwtl4++2TqJWJXAuM78QbdgNe4qofjgM0pX/eGxddFOUbg7U75uvqFVY5/LAecb8QrNANOYXVUu0rEesDZHdFGTJwjsnRfBgZFOQZMvI0FA3QHfGHg/Uz5px3e6yA5A/4wmgM="></span>Kaigen<span class="check">&#10003;</span>
+    </a>
+    <a role="menuitemradio" data-engine="threejs" aria-checked="false">
+      <span class="mark threejs"><svg viewBox="0 0 226.77 226.77" aria-hidden="true"><g transform="translate(8.964 4.2527)" fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="10"><path d="m63.02 200.61-43.213-174.94 173.23 49.874z"/><path d="m106.39 50.612 21.591 87.496-86.567-24.945z"/><path d="m84.91 125.03-10.724-43.465 43.008 12.346z"/><path d="m63.458 38.153 10.724 43.465-43.008-12.346z"/><path d="m149.47 62.93 10.724 43.465-43.008-12.346z"/><path d="m84.915 125.06 10.724 43.465-43.008-12.346z"/></g></svg></span>three.js<span class="check">&#10003;</span>
+    </a>
+  </div>
+  <button id="engine-button" class="glass" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="engine-menu">
+    <span class="label">Running on <span class="name"></span></span>
+    <svg class="chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 6.5 8 3l3.5 3.5M4.5 9.5 8 13l3.5-3.5"/></svg>
+  </button>
+</div>
+
+<script type="module">
+  const canvas = document.getElementById("canvas");
+  const status = document.getElementById("status");
+  const show = (html) => { status.innerHTML = `<p class="msg">${html}</p>`; status.hidden = false; };
+
+  // Each engine gets a fresh page: the canvas is handed to one engine for its whole life.
+  const params = new URLSearchParams(location.search);
+  const ENGINE = params.get("engine") === "threejs" ? "threejs" : "kaigen";
+  const NAMES = { kaigen: "Kaigen", threejs: "three.js" };
+
+  const button = document.getElementById("engine-button");
+  const menu = document.getElementById("engine-menu");
+  const items = [...menu.querySelectorAll("a[data-engine]")];
+  for (const a of items) {
+    const p = new URLSearchParams(location.search);
+    if (a.dataset.engine === "kaigen") p.delete("engine"); else p.set("engine", a.dataset.engine);
+    const q = p.toString();
+    a.href = location.pathname + (q ? `?${q}` : "");
+    const current = a.dataset.engine === ENGINE;
+    a.setAttribute("aria-checked", String(current));
+    if (current) {
+      button.prepend(a.querySelector(".mark").cloneNode(true));
+      button.querySelector(".name").textContent = NAMES[ENGINE];
+      button.setAttribute("aria-label", `Running on ${NAMES[ENGINE]}. Switch engine`);
+    }
+  }
+  // switching reloads the page, so "already found it" has to outlive it
+  const SEEN = "kaigen-claude-of-duty-engine-seen";
+  const seen = () => { try { return localStorage.getItem(SEEN) === "1"; } catch { return false; } };
+  if (!seen()) button.classList.add("pulse");
+  const setOpen = (open) => {
+    if (open) {
+      button.classList.remove("pulse");
+      try { localStorage.setItem(SEEN, "1"); } catch {}
+    }
+    menu.hidden = !open;
+    button.setAttribute("aria-expanded", String(open));
+    if (open) items.find((a) => a.dataset.engine === ENGINE).focus();
+  };
+  button.addEventListener("click", () => setOpen(menu.hidden));
+  document.addEventListener("pointerdown", (e) => {
+    if (!menu.hidden && !document.getElementById("engine").contains(e.target)) setOpen(false);
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !menu.hidden) { setOpen(false); button.focus(); }
+  });
+
+  // Bumped every publish so immutable assets can never be served stale.
+  const VERSION = "__VERSION__";
+
+  async function startKaigen() {
+    // Mobile ALWAYS gets the single-threaded wasm-ios build: threads are not reliable on
+    // phones even where the browser offers SharedArrayBuffer. Same test as the engine's
+    // os_is_mobile (src/os/wasm/main.ts). Desktop threads need cross-origin isolation.
+    // ?profile=mt|st forces one, for testing the other path on this machine.
+    const forced = params.get("profile");
+    const mobile =
+      (navigator.userAgentData?.mobile ?? false) ||
+      (navigator.maxTouchPoints > 0 && matchMedia("(pointer: coarse)").matches) ||
+      /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    const threaded = !mobile && self.crossOriginIsolated && typeof SharedArrayBuffer !== "undefined";
+    const pick = forced === "mt" || forced === "st" ? forced : threaded ? "mt" : "st";
+    const dir = `./${VERSION}/${pick}/`;
+
+    if (!navigator.gpu) {
+      show(`<strong>This demo needs WebGPU.</strong>Try the latest Chrome, Edge or Safari. On iPhone it needs iOS 18 or newer.`);
+      return;
+    }
+    const { createGame } = await import(dir + "main.js");
+    const game = createGame({
+      canvas,
+      // Same-origin, resolved from the page so this works on any host.
+      // Cooked assets are served by the Worker out of R2 and edge-cached for a
+      // year, under a hash of their content so a re-cook is never served stale.
+      baseUrl: new URL("./__ASSETS__/", location.href).href,
+      // Brotli-11, served verbatim with Content-Encoding: br by the site
+      // Worker; fetch decodes it natively.
+      // Absolute, because the worker resolves this against its own location,
+      // not the page — a relative "./mt/..." becomes "/mt/mt/...".
+      wasmUrl: new URL(dir + "game.wasm.br", location.href).href,
+    });
+    game.oncrash = (m) => show(`<strong>The demo crashed.</strong>${m ?? ""}`);
+    await game.ready;
+  }
+
+  // The original three.js game as built (vite build --base ./), unmodified: it owns its whole document, so it
+  // runs in a same-origin frame over the canvas rather than on it.
+  async function startThreejs() {
+    canvas.hidden = true;
+    status.querySelector(".msg").textContent = "Loading three.js…";
+    const frame = document.createElement("iframe");
+    frame.id = "threejs";
+    frame.title = "Claude of Duty on three.js";
+    frame.allow = "fullscreen; gamepad";
+    await new Promise((resolve, reject) => {
+      frame.onload = resolve;
+      frame.onerror = () => reject(new Error("the three.js build failed to load"));
+      frame.src = "./__THREEJS__/threejs/index.html";
+      document.body.prepend(frame);
+    });
+    frame.focus();
+  }
+
+  try {
+    await (ENGINE === "threejs" ? startThreejs : startKaigen)();
+    if (status.querySelector(".spark")) status.hidden = true;
+  } catch (err) {
+    show(`<strong>Couldn't start ${NAMES[ENGINE]}.</strong>${String(err && err.message || err)}`);
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  // ONE configuration for every platform. That works because CodeLLDB
+  // (vadimcn.vscode-lldb, see extensions.json) uses type "lldb" on Windows,
+  // macOS and Linux alike -- and `type` is the one attribute VS Code forbids
+  // inside a platform block. Everything else, `program` included, may be
+  // overridden per OS.
+  "configurations": [
+    {
+      "name": "hz: Debug",
+      "type": "lldb",
+      "request": "launch",
+      "program": "${workspaceFolder}/out/windows/debug/${workspaceFolderBasename}.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "hz: Build",
+      "osx": {
+        "program": "${workspaceFolder}/out/macos/debug/${workspaceFolderBasename}"
+      },
+      "linux": {
+        "program": "${workspaceFolder}/out/linux/debug/${workspaceFolderBasename}"
+      }
+    }
+  ]
+}

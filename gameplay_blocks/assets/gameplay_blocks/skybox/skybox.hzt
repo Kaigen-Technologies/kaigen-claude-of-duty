@@ -1,0 +1,7 @@
+type HdrEnvironmentBlobAsset
+version 1
+---
+cubemap "/gameplay_blocks/skybox/skybox_cubemap" u8
+intensity 39321.601563
+source_width 2048
+source_height 1024

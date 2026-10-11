@@ -1,0 +1,6 @@
+type ModelImportSettings
+version 17
+---
+rig_mode ""
+import_scale 1.000000
+shader_override 0

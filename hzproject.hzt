@@ -1,0 +1,15 @@
+type HzProjectConfig
+version 1
+---
+name kaigen-claude-of-duty
+id bf54c9ad7ed91ad80d1a0ad8bee402c8
+engine hz
+src_roots 1 src
+asset_roots 1 assets
+shader_roots 1 shaders
+ios_bundle_name ClaudeOfDuty
+ios_bundle_id com.kaigen.demo.claudeofduty
+publish
+  product_name "Claude of Duty"
+modules 1 gameplay_blocks
+orientation landscape

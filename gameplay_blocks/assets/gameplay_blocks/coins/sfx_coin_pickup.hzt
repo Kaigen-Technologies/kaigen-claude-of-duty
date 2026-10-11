@@ -1,0 +1,7 @@
+type AudioClipBlobAsset
+version 1
+---
+audio "/gameplay_blocks/coins/sfx_coin_pickup" u8
+file_format AUDIO_FORMAT_WAV
+volume 1.000000
+loop false

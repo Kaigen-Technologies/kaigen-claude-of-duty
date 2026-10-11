@@ -1,0 +1,9 @@
+# Published on top of the measured set (tools/sync_demo_assets.ts). The measuring run plays one quality preset on one GPU;
+# the pause menu switches presets and phones start on High, so every variant of the game's shaders and textures ships.
+shaders/cod_*_webgpu.hza
+shaders/cod_*_material.hza
+shaders/standard*_webgpu.hza
+shaders/standard*_material.hza
+engine/renderer/**
+claude_of_duty/**
+gameplay_blocks/**

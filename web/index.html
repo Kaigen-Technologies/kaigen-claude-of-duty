@@ -85,9 +85,10 @@
   #threejs { position: fixed; inset: 0; width: 100vw; height: 100vh; border: 0; display: block; background: #000; }
 
   /* "Made with Kaigen": a real link over the canvas; the game's input listeners sit on the canvas, not here */
+  /* top right under the game's fps panel (both games draw it 112/1080 of the height tall) */
   #kaigen {
     position: fixed;
-    top: max(12px, env(safe-area-inset-top));
+    top: calc(max(12px, env(safe-area-inset-top)) + 14vh);
     right: max(12px, env(safe-area-inset-right));
     z-index: 2;
     display: flex;
@@ -115,8 +116,8 @@
   #engine {
     position: fixed;
     left: max(16px, env(safe-area-inset-left));
-    bottom: max(16px, env(safe-area-inset-bottom));
-    z-index: 2;
+    bottom: calc(max(16px, env(safe-area-inset-bottom)) + 7vh);
+    z-index: 3;
   }
   #engine-button {
     position: relative;
@@ -192,11 +193,11 @@
   #engine-menu a .check { margin-left: auto; color: #E551BA; visibility: hidden; }
   #engine-menu a[aria-checked="true"] .check { visibility: visible; }
 
-  /* phones: the icon alone; the game's fish bar (boids_controls_draw: 16 + 72 tall) spans the width, sit above it */
+  /* phones: the icons alone */
   @media (pointer: coarse), (max-width: 720px) {
-    #kaigen { padding: 4px; gap: 0; }
+    /* the phone HUD's fps panel is taller */
+    #kaigen { padding: 4px; gap: 0; top: calc(max(12px, env(safe-area-inset-top)) + 23vh); }
     #kaigen .label { display: none; }
-    #engine { bottom: calc(max(16px, env(safe-area-inset-bottom)) + 84px); }
     #engine-button { width: 52px; padding: 0; justify-content: center; }
     #engine-button .label, #engine-button .chevron { display: none; }
     #engine-button.pulse::after { inset: -1px; }

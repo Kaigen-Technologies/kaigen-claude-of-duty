@@ -56,6 +56,6 @@ else looks, and on-screen buttons fire, aim (a toggle), jump, crouch, reload, sw
 lock on touch: the match plays as soon as it loads. Phones start on the High preset (the highest an iPhone 13 holds at
 60 fps); desktops start on Ultra.
 
-`web/` is the comparison page published at kaigen3d.com. `web/threejs/` is the original game built unmodified
-(`vite build --base ./` at [d9b237b](https://github.com/mshumer/Claude-of-Duty/commit/d9b237b)), MIT licensed by its
-author.
+`web/` is the comparison page published at kaigen3d.com. `web/threejs/` is the original game built from [d9b237b](https://github.com/mshumer/Claude-of-Duty/commit/d9b237b)
+(`vite build --base ./`) with one addition, the same frame-rate panel the Kaigen version draws, so the two can be
+compared. MIT licensed by its author.

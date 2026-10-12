@@ -1,12 +1,12 @@
 // Claude of Duty flow: frame clock, staged load, pause and pointer-lock policy, settings, dev switches.
 
-// the presets: render scale becomes a TAAU tier (2/3 on High, Ultra); Ultra keeps a 1.5 max dpr
+// the presets: render scale becomes a TAAU tier (2/3 on High, Ultra); the pixel caps keep the output-size passes in budget
 hz_internal CodQualityPreset cod_quality_preset(u32 q) {
   switch (q) {
-  case COD_QUALITY_LOW: return (CodQualityPreset){RENDERER_UPSCALE_PERFORMANCE, 1024, 3, 60, false, false, false, false, false, true, 4, 2000, 64, 1.0f};
-  case COD_QUALITY_MEDIUM: return (CodQualityPreset){RENDERER_UPSCALE_BALANCED, 2048, 3, 90, true, true, false, true, true, true, 8, 6000, 128, 1.0f};
-  case COD_QUALITY_HIGH: return (CodQualityPreset){RENDERER_UPSCALE_QUALITY, 2048, 4, 140, true, true, true, true, true, true, 16, 12000, 256, 1.25f};
-  default: return (CodQualityPreset){RENDERER_UPSCALE_QUALITY, 4096, 4, 200, true, true, true, true, true, true, 16, 24000, 512, 1.5f};
+  case COD_QUALITY_LOW: return (CodQualityPreset){RENDERER_UPSCALE_PERFORMANCE, 1024, 3, 60, false, false, false, true, 2000, 64, 1.0f, 1920u * 1080u};
+  case COD_QUALITY_MEDIUM: return (CodQualityPreset){RENDERER_UPSCALE_BALANCED, 2048, 3, 90, true, false, true, true, 6000, 128, 1.0f, 1920u * 1080u};
+  case COD_QUALITY_HIGH: return (CodQualityPreset){RENDERER_UPSCALE_QUALITY, 2048, 4, 140, true, true, true, true, 12000, 256, 1.25f, 2560u * 1440u};
+  default: return (CodQualityPreset){RENDERER_UPSCALE_QUALITY, 4096, 4, 200, true, true, true, true, 24000, 512, 1.5f, 3840u * 2160u};
   }
 }
 
@@ -17,12 +17,9 @@ hz_internal void cod_aim_at(v3 eye, v3 target, f32 *yaw, f32 *pitch) {
   *pitch = m_atan2f(rel.y, m_sqrtf(rel.x * rel.x + rel.z * rel.z));
 }
 
-// the preset a fresh match starts on: High is the highest an iPhone 13 holds at 60 fps; desktops run Ultra
-hz_internal i32 cod_quality_default(void) { return os_is_mobile() ? COD_QUALITY_HIGH : COD_QUALITY_ULTRA; }
-
 hz_internal CodSettings cod_settings_sanitise(CodSettings s) {
-  if (s.quality < 0 || s.quality >= COD_QUALITY_COUNT)
-    s.quality = cod_quality_default();
+  if (s.quality < -1 || s.quality >= COD_QUALITY_COUNT)
+    s.quality = -1;
   s.sensitivity = m_clampf(s.sensitivity, 0.2f, 3.0f);
   s.fov = m_clampf(s.fov, 65.0f, 120.0f); // Field Of View slider
   s.volume = m_clampf(s.volume, 0.0f, 1.0f);
@@ -111,6 +108,10 @@ ecs_system(cod_flow_system, EcsIn(CodDevSwitches), EcsResIn(CodInput), EcsResInO
     s.serial = settings->serial + 1;
     *settings = s;
     f->sw_quality = sw->quality;
+  }
+  if (sw->dynamic_from >= 0 && sw->dynamic_from != f->sw_dynamic_from) {
+    f->dynamic_from_request = MIN(sw->dynamic_from, COD_QUALITY_COUNT - 1);
+    f->sw_dynamic_from = sw->dynamic_from;
   }
 
   if (f->state == COD_STATE_LOADING) {
@@ -208,20 +209,21 @@ ecs_system(cod_dev_system, EcsIn(CodDevSwitches), EcsResIn(CodFlow), EcsResIn(Co
 }
 
 void cod_flow_init(EcsWorld *w) {
-  ecs_resource_set(w, CodFlow, ((CodFlow){.state = COD_STATE_LOADING, .was_focused = true, .sw_quality = -1}));
+  ecs_resource_set(w, CodFlow, ((CodFlow){.state = COD_STATE_LOADING, .was_focused = true, .sw_quality = -1,
+                                          .sw_dynamic_from = -1, .dynamic_from_request = -1}));
   CodClock clock = {.fixed = fixed_timestep_make(COD_FIXED_HZ, COD_MAX_SUBSTEPS)};
   ecs_resource_set(w, CodClock, clock);
   ecs_resource_set(w, CodLoad, ((CodLoad){.started_s = os_ticks_to_ms(os_time_now()) * 0.001}));
   ecs_resource_set(w, CodDev, ((CodDev){.weapon = -1, .time_of_day = -1.0f}));
   ecs_resource_set(w, CodSettings,
-                   ((CodSettings){.quality = cod_quality_default(), .sensitivity = 1.0f, .fov = COD_FOV, .volume = 1.0f, .serial = 1}));
+                   ((CodSettings){.quality = -1, .sensitivity = 1.0f, .fov = COD_FOV, .volume = 1.0f, .serial = 1}));
   ecs_resource_set(w, CodMenuRequests, ((CodMenuRequests){0}));
   ecs_resource_set(w, CodEditor, ((CodEditor){0}));
   test_clock_init(w);
   // the dev switches live on one entity so `set:CodDevSwitches.<field>` reaches them
   EcsEntity sw = ecs_entity_create(w);
   ecs_component_set(w, sw, EntityName, {.name = fixedstr64_from_cstr("DevSwitches")});
-  ecs_component_set(w, sw, CodDevSwitches, {.quality = -1, .time_of_day = -1.0f, .weapon = -1});
+  ecs_component_set(w, sw, CodDevSwitches, {.quality = -1, .dynamic_from = -1, .time_of_day = -1.0f, .weapon = -1});
 }
 
 void cod_flow_schedule(EcsWorld *w, f32 dt) {

@@ -58,7 +58,7 @@ ECS_COMPONENT(CodSurfaceTag) {
   u32 surface; // CodSurface
 };
 
-// the quality presets; ultra is the default
+// the quality presets, one per RendererQuality level; the renderer's dynamic quality picks the level
 typedef enum CodQuality {
   COD_QUALITY_LOW = 0,
   COD_QUALITY_MEDIUM = 1,
@@ -72,16 +72,14 @@ typedef struct CodQualityPreset {
   u32 shadow_map_size;
   u32 cascades;
   f32 shadow_distance;
-  b32 taa;
   b32 gtao;
   b32 ssr;
-  b32 volumetrics;
   b32 motion_blur;
   b32 bloom;
-  u32 anisotropy;
-  u32 particle_budget;
-  u32 decal_budget;
-  f32 max_dpr; // the frame's resolution limit, final pass and HUD included
+  u32 particle_budget; // sizes the sprite atlas and the ambient motes at load
+  u32 decal_budget;    // live decals at once
+  f32 max_dpr;         // the frame's resolution limit, final pass and HUD included
+  u32 max_pixels;      // the frame's total pixel limit
 } CodQualityPreset;
 
 // the game state machine: the match runs at once; Esc or a lost pointer lock pauses
@@ -130,6 +128,7 @@ ECS_COMPONENT_TYPEDEF(CodClock);
 HZ_REFLECT()
 ECS_COMPONENT(CodDevSwitches) {
   i32 quality;   // CodQuality; -1 = keep the settings' preset
+  i32 dynamic_from; // CodQuality the dynamic quality continues from (it keeps adapting); -1 = none
   b32 start;     // runs the match without pointer lock (a dev-switch run never pauses on focus or lock loss)
   i32 screen;    // 0 none, 1 the pause menu
   f32 time_of_day; // hours 0..24; < 0 keeps the sky's own clock
@@ -194,12 +193,14 @@ typedef struct CodFlow {
   b32 sw_start;       // the switches as last latched
   i32 sw_screen;
   i32 sw_quality;
+  i32 sw_dynamic_from;
+  i32 dynamic_from_request; // CodQuality the main lane hands the dynamic quality; -1 = none
 } CodFlow;
 ECS_COMPONENT_TYPEDEF(CodFlow);
 
 // the player's settings, written by the pause menu; owners read serial to apply
 typedef struct CodSettings {
-  i32 quality;      // CodQuality
+  i32 quality;      // CodQuality the player picked; -1 = automatic (the renderer's dynamic quality)
   f32 sensitivity;  // multiplier on the base mouse sensitivity
   f32 fov;          // vertical degrees
   f32 volume;       // master 0..1

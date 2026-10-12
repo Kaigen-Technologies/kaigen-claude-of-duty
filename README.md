@@ -54,7 +54,9 @@ Start pauses. F, V, G and T (use, melee, grenade, flashlight) are bound but do n
 Touch (iOS, touch screens): a stick under the left thumb moves (push it past the ring, forward, to sprint), dragging anywhere
 else looks, and on-screen buttons fire, aim (a toggle), jump, crouch, reload, swap weapons and pause. There is no pointer
 lock on touch: the match plays as soon as it loads. Phones start on the High preset (the highest an iPhone 13 holds at
-60 fps); desktops start on Ultra.
+60 fps); desktops start where the engine's hardware rules put them. From there the engine's dynamic quality measures the
+GPU during the match and steps the preset down or up to hold 60 fps. Picking a preset in the pause menu fixes it;
+Defaults hands it back to dynamic quality.
 
 `web/` is the comparison page published at kaigen3d.com. `web/threejs/` is the original game built from [d9b237b](https://github.com/mshumer/Claude-of-Duty/commit/d9b237b)
 (`vite build --base ./`) with one addition, the same frame-rate panel the Kaigen version draws, so the two can be

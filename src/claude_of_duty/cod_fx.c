@@ -20,6 +20,7 @@
 #include "cod_fx_decals.c"
 
 #define CF_DECAL_QUEUE 512
+#define CF_DECAL_RING 256u // the engine's visible decal set: the ring never holds more than it can show
 #define CF_REQUESTS 1024
 #define CF_AMBIENT_BOX 22.0f
 
@@ -36,7 +37,6 @@ typedef struct CodFxRuntime {
   EcsQuery *cam_query;
   EcsQuery *dev_query;
   u32 particle_budget;
-  u32 decal_budget;
   u64 init_t0;
   b32 atlas_failed;
 } CodFxRuntime;
@@ -105,10 +105,9 @@ void cod_fx_init(EcsWorld *w) {
   CodFxAssets *as = ecs_resource_get_mut(w, CodFxAssets);
   s->init_t0 = os_time_now();
   s->alloc = make_arena_allocator(arena_create(MB(16), MB(1)));
-  const CodSettings *settings = ecs_resource_get(w, CodSettings);
-  CodQualityPreset preset = cod_quality_preset((u32)settings->quality);
+  // the start level's budget sizes the sprite atlas and the motes (load-time); the decal ring follows every level
+  CodQualityPreset preset = cod_quality_preset(MIN((u32)renderer_quality(r), (u32)COD_QUALITY_ULTRA));
   s->particle_budget = preset.particle_budget;
-  s->decal_budget = preset.decal_budget;
 
   CodFxPlan *plan = ALLOC(&s->alloc, CodFxPlan);
   plan->alloc = &s->alloc;
@@ -160,8 +159,8 @@ void cod_fx_init(EcsWorld *w) {
 
   s->cam_query = ecs_query_cached(w, EcsIn(Camera));
   s->dev_query = ecs_query_cached(w, EcsIn(CodDevSwitches));
-  // the engine's visible decal set is 256: the ring never holds more than it can show
-  cod_fx_decals_init(&s->decals, &s->alloc, ecs_resource_get_mut(w, AssetSystem), s->decal_budget < 256u ? s->decal_budget : 256u);
+  cod_fx_decals_init(&s->decals, &s->alloc, ecs_resource_get_mut(w, AssetSystem), CF_DECAL_RING);
+  cod_fx_decals_set_limit(&s->decals, r, MIN(preset.decal_budget, CF_DECAL_RING));
   cod_fx_atlas_pipelines(&s->atlas, s->particle_budget >= 10000 ? 1024u : 512u);
 }
 
@@ -213,6 +212,8 @@ void cod_fx_frame(EcsWorld *w) {
   particle_material_set_vec3(ps, s->mat, "amb_bottom", (v3){a * 0.5f, a * 0.44f, a * 0.38f});
 
   cod_fx_decals_poll(&s->decals, ecs_resource_get(w, AssetSystem));
+  CodQualityPreset level = cod_quality_preset(MIN((u32)renderer_quality(r), (u32)COD_QUALITY_ULTRA));
+  cod_fx_decals_set_limit(&s->decals, r, MIN(level.decal_budget, CF_DECAL_RING));
   cod_fx_decals_frame(&s->decals, r, ecs_resource_get(w, CodFxAssets)->decals, clock->time);
   const CodDevSwitches *sw = ecs_query_get_singleton(CodDevSwitches, s->dev_query);
   if (sw) cod_fx_decal_dump_frame(&s->decals, sw->fx_dump);

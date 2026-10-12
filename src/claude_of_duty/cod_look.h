@@ -24,7 +24,6 @@ typedef struct CodLook {
   f32 exposure_bias;    // EV, + darker
   f32 indirect_scale;   // the indirect budget for this sun elevation
   f32 scene_per_unit;   // one scene radiance unit in cd/m2: emissive effects scale by it
-  u32 quality;          // CodQuality in effect
   f32 view_key;         // the viewmodel rig's key, scene units (the view flash peaks at a ratio of it)
 } CodLook;
 ECS_COMPONENT_TYPEDEF(CodLook);
@@ -60,8 +59,10 @@ typedef struct CodSkyBlock {
   v4 clouds2;         // x cirrus coverage, y cirrus opacity, zw wind km/s
 } CodSkyBlock;
 
-// main lane, app_init: fills the renderer desc from the quality preset (shadows, TAA, modules)
+// main lane, app_init: fills the renderer desc (shadows, TAA, modules); the start level resizes what it sized
 void cod_look_renderer_desc(RendererInitDesc *desc);
+// main lane, app_init after the settings exist: the renderer's start level (phones High, desktops the hardware's)
+void cod_look_quality_init(EcsWorld *w);
 // main lane, app_init: the sky, fog, exposure and grade modules
 void cod_look_init(EcsWorld *w, Allocator *alloc);
 // inside the scope after the camera: time of day, celestial state, post; publishes CodLook

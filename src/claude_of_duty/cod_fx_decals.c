@@ -21,6 +21,7 @@ typedef struct CodFxDecals {
   b32 failed;
   CodFxDecalSlot *slots;
   u32 cap;
+  u32 limit; // the quality level's live marks (<= cap): the ring wraps here
   u32 cursor;
   u32 live;
   u32 placed;
@@ -38,6 +39,7 @@ hz_internal const char *cod_fx_decal_suffix(u32 map) { return map == 0 ? "" : ma
 // loads every tile's three maps; the ring waits until all are resident
 hz_internal void cod_fx_decals_init(CodFxDecals *d, Allocator *alloc, AssetSystem *assets, u32 cap) {
   d->cap = cap;
+  d->limit = cap;
   d->slots = ALLOC_ARRAY(alloc, CodFxDecalSlot, cap);
   for (u32 t = 0; t < CF_D_COUNT; t++)
     for (u32 m = 0; m < 3; m++) {
@@ -58,7 +60,7 @@ hz_internal void cod_fx_decals_poll(CodFxDecals *d, const AssetSystem *assets) {
 // the box a decal projects: its normal, rolled about it from a gravity-aligned reference, over a thickness of twice the half-depth
 hz_internal void cod_fx_decal_place(CodFxDecals *d, RendererState *r, const CodFxDecalReq *q, f32 now) {
   CodFxDecalSlot *s = &d->slots[d->cursor];
-  d->cursor = (d->cursor + 1) % d->cap;
+  d->cursor = (d->cursor + 1) % d->limit;
   v3 n = v3_normalize(q->normal);
   v3 ref = m_fabsf(n.y) > 0.94f ? (v3){1.0f, 0.0f, 0.0f} : (v3){0.0f, 1.0f, 0.0f};
   v3 t = v3_normalize(v3_sub(ref, v3_scale(n, v3_dot(n, ref))));
@@ -94,6 +96,24 @@ hz_internal void cod_fx_decal_place(CodFxDecals *d, RendererState *r, const CodF
   if (!s->live) d->live++;
   s->live = true;
   d->placed++;
+}
+
+// main lane: a lower limit retires the marks past it at once
+hz_internal void cod_fx_decals_set_limit(CodFxDecals *d, RendererState *r, u32 limit) {
+  limit = MAX(1u, MIN(limit, d->cap));
+  if (limit == d->limit)
+    return;
+  for (u32 i = limit; i < d->cap; i++) {
+    CodFxDecalSlot *s = &d->slots[i];
+    if (!s->live)
+      continue;
+    s->live = false;
+    d->live--;
+    renderer_set_decal_visible(r, s->h, false);
+  }
+  d->limit = limit;
+  if (d->cursor >= limit)
+    d->cursor = 0;
 }
 
 // main lane: places what the consumers queued, fades the marks and frees the dead ones

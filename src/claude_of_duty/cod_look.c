@@ -28,7 +28,7 @@ typedef struct CodLookState {
   CodExposure *exposure;
   CodPost *post;
   CodLookBlock block; // lux; the prepare pre-exposes the irradiances
-  i32 quality_applied;
+  u32 settings_serial; // the CodSettings serial the quality mode was last taken from
   EcsQuery *camera_query;
   b32 rooms_ready;
   HzHandleT(MaterialBlobAsset) final_asset;
@@ -46,7 +46,8 @@ ECS_COMPONENT_TYPEDEF(CodLookState);
 hz_internal v4 cod_v4(v3 v, f32 w) { return (v4){v.x, v.y, v.z, w}; }
 
 void cod_look_renderer_desc(RendererInitDesc *desc) {
-  CodQualityPreset q = cod_quality_preset((u32)cod_quality_default());
+  // the smallest preset's sizes: the start level (cod_look_quality_init) grows them before the first frame
+  CodQualityPreset q = cod_quality_preset(COD_QUALITY_LOW);
   desc->sample_count = 1;
   desc->gbuffer_enabled = true;
   desc->upscale = (RendererUpscaleDesc){.enabled = true, .quality = q.upscale};
@@ -85,7 +86,7 @@ ecs_system(cod_look_time_system, EcsInOut(DayNightCycle), EcsResIn(CodDev)) {
 }
 
 // the block's sun and moon through the photometry; publishes CodLook
-ecs_system(cod_look_sky_system, EcsResIn(DayNightState), EcsResIn(CodSettings), EcsResIn(CodClock), EcsResIn(CodWorld),
+ecs_system(cod_look_sky_system, EcsResIn(DayNightState), EcsResIn(CodClock), EcsResIn(CodWorld),
            EcsResInOut(CodLook), EcsResInOut(CodLookState)) {
   const DayNightState *dn = ecs_sys_get_resource(DayNightState);
   if (!dn->ready)
@@ -131,7 +132,6 @@ ecs_system(cod_look_sky_system, EcsResIn(DayNightState), EcsResIn(CodSettings), 
   look->indirect_scale = (f32)s->indirect_scale;
   look->scene_per_unit = (f32)COD_SCENE_LUX;
   look->view_key = cod_view_rig(s).key_intensity;
-  look->quality = (u32)ecs_sys_get_resource(CodSettings)->quality;
 }
 
 // the engine bloom the COD final composites; the lens and grade are the final's
@@ -181,6 +181,15 @@ hz_internal void cod_look_prepare(RendererState *r, const RendererPrepareCtx *ct
   renderer_set_uniforms(r, ls->feature, "_CodSky", &ls->sky_block, sizeof(ls->sky_block));
 }
 
+hz_internal void cod_look_quality(RendererState *r, RendererQuality level, void *user);
+
+// the preset's whole-frame resolution limits, applied at the next frame start
+hz_internal void cod_look_pixel_caps(u32 quality) {
+  CodQualityPreset q = cod_quality_preset(quality);
+  hz_set_max_dpr(q.max_dpr);
+  hz_set_max_pixels(q.max_pixels);
+}
+
 void cod_look_init(EcsWorld *w, Allocator *alloc) {
   RendererState *r = ecs_resource_get_mut(w, RendererState);
   day_night_init(w, r, alloc, DAY_NIGHT_SKY_PHYSICAL);
@@ -193,9 +202,9 @@ void cod_look_init(EcsWorld *w, Allocator *alloc) {
   renderer_set_sky_atmosphere(r, &atmo);
   // metals reflect the sky on Low and Medium too
   renderer_sky_atmosphere_set_capture_always(r, true);
-  ecs_resource_set(w, CodLook, ((CodLook){.quality = (u32)cod_quality_default(), .scene_per_unit = (f32)COD_SCENE_LUX}));
+  ecs_resource_set(w, CodLook, ((CodLook){.scene_per_unit = (f32)COD_SCENE_LUX}));
   CodLookState *ls = ALLOC(alloc, CodLookState);
-  ls->quality_applied = -1;
+  ls->settings_serial = ecs_resource_get(w, CodSettings)->serial; // cod_look_quality_init took the mode from it
   ls->ads_applied = -1.0f;
   ls->final_asset = asset_load(MaterialBlobAsset, ecs_resource_get_mut(w, AssetSystem), .path = COD_FINAL_MAT);
   ls->grade_lut = cod_grade_lut_make();
@@ -205,7 +214,8 @@ void cod_look_init(EcsWorld *w, Allocator *alloc) {
   ls->camera_query = ecs_query_cached(w, EcsIn(Camera));
   ls->exposure = cod_exposure_init(r, alloc);
   ls->post = cod_post_init(w, r, alloc, ls->exposure->state);
-  ls->feature = renderer_add_feature(r, &(RendererFeatureDesc){.name = "cod_look", .user = ls, .prepare = cod_look_prepare});
+  ls->feature = renderer_add_feature(
+      r, &(RendererFeatureDesc){.name = "cod_look", .user = ls, .prepare = cod_look_prepare, .quality = cod_look_quality});
   assert_msg(ls->feature.id != 0, "cod_look_init: the cod_look feature did not register");
   ecs_resource_set_ref(w, CodLookState, ls);
   // static level, moving camera: centred cascades rebuild only on anchor moves
@@ -237,11 +247,15 @@ hz_internal f32 cod_csm_split(u32 i, u32 cascades, f32 dist) {
   return (COD_CSM_LAMBDA * n * m_powf(dist / n, p) + (1.0f - COD_CSM_LAMBDA) * (n + (dist - n) * p)) / dist;
 }
 
-// the quality preset's renderer level, upscale tier, AO, SSR, bloom and cascades
-hz_internal void cod_look_apply_quality(RendererState *r, u32 quality) {
+// the renderer's level as the COD preset: upscale tier, pixel caps, AO, SSR, bloom, shadow resolution and cascades
+hz_internal void cod_look_quality(RendererState *r, RendererQuality level, void *user) {
+  UNUSED(user);
+  u32 quality = MIN((u32)level, (u32)COD_QUALITY_ULTRA);
   CodQualityPreset q = cod_quality_preset(quality);
-  renderer_set_quality_with_upscale(r, (RendererQuality)MIN(quality, (u32)RENDERER_QUALITY_ULTRA), q.upscale);
-  hz_set_max_dpr(q.max_dpr);
+  // inside the level's broadcast: the render size changes once, after every feature took the level
+  renderer_set_upscale_quality(r, q.upscale);
+  cod_look_pixel_caps(quality);
+  renderer_shadows_set_resolution(r, q.shadow_map_size);
   RendererGtaoParams ao = renderer_get_gtao(r);
   ao.enabled = q.gtao;
   ao.radius = COD_AO_RADIUS;
@@ -266,6 +280,30 @@ hz_internal void cod_look_apply_quality(RendererState *r, u32 quality) {
   renderer_shadows_set_scene(r, (ColorF32){0}, q.cascades, split, q.shadow_distance);
 }
 
+// the settings' quality: a preset (>= 0) is FIXED at it, -1 is DYNAMIC from the level in force
+hz_internal void cod_look_quality_mode(RendererState *r, i32 quality) {
+  if (quality >= 0) {
+    renderer_set_quality_mode(r, RENDERER_QUALITY_FIXED);
+    renderer_set_quality(r, (RendererQuality)MIN(quality, (i32)COD_QUALITY_ULTRA));
+  } else {
+    renderer_set_quality_mode(r, RENDERER_QUALITY_DYNAMIC);
+  }
+}
+
+void cod_look_quality_init(EcsWorld *w) {
+  // the level's broadcast resizes targets and calls JS on WebGPU
+  assert(is_main_thread());
+  RendererState *r = ecs_resource_get_mut(w, RendererState);
+  // High is the highest an iPhone 13 holds at 60 fps; desktops start where the hardware rules put them
+  RendererHardware hw = renderer_hardware(r);
+  renderer_set_quality(r, os_is_mobile() ? RENDERER_QUALITY_HIGH : renderer_quality_for_hardware(&hw));
+  i32 picked = ecs_resource_get(w, CodSettings)->quality;
+  if (picked >= 0)
+    cod_look_quality_mode(r, picked);
+  // cod_look takes the level at its registration's first frame; the first frame already gets the caps
+  cod_look_pixel_caps(MIN((u32)renderer_quality(r), (u32)COD_QUALITY_ULTRA));
+}
+
 void cod_look_sync(EcsWorld *w) {
   // the sky, fog, exposure and quality are main-lane renderer calls outside the frame
   assert(is_main_thread());
@@ -273,6 +311,19 @@ void cod_look_sync(EcsWorld *w) {
   day_night_sync(w, r);
   CodLookState *ls = ecs_resource_get_mut(w, CodLookState);
   const CodLook *look = ecs_resource_get(w, CodLook);
+  // a preset the player picks holds (FIXED); automatic hands the level back to the renderer's dynamic quality
+  const CodSettings *settings = ecs_resource_get(w, CodSettings);
+  if (settings->serial != ls->settings_serial) {
+    ls->settings_serial = settings->serial;
+    cod_look_quality_mode(r, settings->quality);
+  }
+  CodFlow *flow = ecs_resource_get_mut(w, CodFlow);
+  if (flow->dynamic_from_request >= 0) {
+    renderer_set_quality(r, (RendererQuality)flow->dynamic_from_request);
+    flow->dynamic_from_request = -1;
+  }
+  // only the match is measured: the load screen, its bakes and the pause menu are not the game's steady cost
+  renderer_quality_measure(r, flow->state == COD_STATE_PLAYING);
   const DayNightState *dn = ecs_resource_get(w, DayNightState);
   const CodSky *s = &ls->sky;
   if (!dn->ready)
@@ -312,11 +363,7 @@ void cod_look_sync(EcsWorld *w) {
     ls->ads_applied = ls->ads;
   }
 
-  if ((i32)look->quality != ls->quality_applied) {
-    cod_look_apply_quality(r, look->quality);
-    ls->quality_applied = (i32)look->quality;
-  }
-  cod_post_sync(ls->post, look, ls->hurt);
+  cod_post_sync(ls->post, look, renderer_quality(r), ls->hurt);
 
   // the key (aureole-shifted beam, floored, key gain) over the block's physical key at the camera
   const Camera *cam = ecs_query_get_singleton(Camera, ls->camera_query);

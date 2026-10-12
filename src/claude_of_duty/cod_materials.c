@@ -267,7 +267,8 @@ void cod_materials_init(EcsWorld *w) {
   ecs_resource_set_zero(w, CodMaterials);
   ecs_resource_set_zero(w, CodMatState);
   CodMatState *s = ecs_resource_get_mut(w, CodMatState);
-  s->quality = ecs_resource_get(w, CodSettings)->quality;
+  // the start level (cod_look_quality_init): the bakes are load-time, a later level change keeps them
+  s->quality = MIN((u32)renderer_quality(ecs_resource_get(w, RendererState)), (u32)COD_QUALITY_ULTRA);
   CodBakeState *b = &s->bake;
   b->alloc = make_arena_allocator(arena_create(GB(1), MB(8)));
   cod_bake_pipelines(b);

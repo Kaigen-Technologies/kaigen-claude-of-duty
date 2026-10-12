@@ -261,7 +261,9 @@ void cod_hud_frame(EcsWorld *w) {
     if (playing && v.touch && !m->hud_off)
       cod_hud_draw_touch(u, ecs_resource_get(w, CodTouch), m);
     if (menu->shown >= 0.004f) {
-      CodMenuFrame mf = {.u = u, .input = input, .cur = settings, .req = req, .k = v.k, .raw_dt = v.raw_dt, .touch = v.touch};
+      i32 level = (i32)MIN((u32)renderer_quality(ecs_resource_get(w, RendererState)), (u32)COD_QUALITY_ULTRA);
+      CodMenuFrame mf = {.u = u, .input = input, .cur = settings, .level = level, .req = req, .k = v.k, .raw_dt = v.raw_dt,
+                         .touch = v.touch};
       cod_hud_draw_menu(&mf, &v, ease_quad_out(menu->shown));
       if (mf.hand)
         u->cursor = OS_CURSOR_HAND;

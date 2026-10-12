@@ -12,6 +12,7 @@ typedef struct CodMenuFrame {
   CodUi *u;
   InputSystem *input;
   const CodSettings *cur;
+  i32 level; // the renderer's level in force: the preset shown while the settings say automatic
   CodMenuRequests *req;
   f32 k;
   f32 raw_dt;
@@ -162,8 +163,9 @@ hz_internal hz_noinline void cod_menu_rows(CodMenuFrame *f) {
   cod_menu_row(k) {
     cod_menu_row_name(f, "GRAPHICS PRESET");
     ui_element({}) {
+      i32 shown = cur->quality >= 0 ? cur->quality : f->level;
       for (u32 i = 0; i < 4; i++)
-        if (cod_menu_seg_button(f, ui_idi("CodMenuQuality", i), i, cod_menu_preset_name(i), cur->quality == (i32)i, i == 3))
+        if (cod_menu_seg_button(f, ui_idi("CodMenuQuality", i), i, cod_menu_preset_name(i), shown == (i32)i, i == 3))
           cod_menu_edit(f)->quality = (i32)i;
     }
   }
@@ -236,7 +238,7 @@ hz_internal hz_noinline void cod_menu_panel(CodMenuFrame *f) {
         s->sensitivity = 1.0f;
         s->fov = 80.0f;
         s->invert_y = false;
-        s->quality = cod_quality_default();
+        s->quality = -1; // automatic: the renderer's dynamic quality
         s->volume = 1.0f;
       }
     }

@@ -14,11 +14,12 @@ CodPost *cod_post_init(EcsWorld *w, RendererState *r, Allocator *alloc, GpuBuffe
   return p;
 }
 
-// main lane before the renderer: the quality preset gates each pass, the key light aims the contact ray
-void cod_post_sync(CodPost *p, const CodLook *look, v4 hurt) {
-  CodQualityPreset q = cod_quality_preset(look->quality);
+// main lane before the renderer: the level's preset gates each pass, the key light aims the contact ray
+void cod_post_sync(CodPost *p, const CodLook *look, RendererQuality level, v4 hurt) {
+  u32 quality = MIN((u32)level, (u32)COD_QUALITY_ULTRA);
+  CodQualityPreset q = cod_quality_preset(quality);
   p->blur->enabled = q.motion_blur;
-  p->contact->enabled = look->quality >= COD_QUALITY_MEDIUM;
+  p->contact->enabled = quality >= COD_QUALITY_MEDIUM;
   p->contact->sun = look->key_dir;
   p->lowhealth->hurt = hurt;
 }

@@ -145,7 +145,7 @@ ECS_COMPONENT_TYPEDEF(AppMemory);
 #define COD_CLEAR_COLOR ((ColorF32){0.0f, 0.0f, 0.0f, 1.0f})
 
 // the sampler level is fixed when the GPU starts
-const HzAppConfig hz_app_config = {.max_anisotropy = 16, .max_dpr = 1.5f}; // the launch preset (Ultra)'s cap: no resize at load
+const HzAppConfig hz_app_config = {.max_anisotropy = 16}; // the quality level sets the resolution limits (cod_look)
 
 typedef struct AppState {
   EcsWorld *world;
@@ -203,6 +203,7 @@ HZ_APP_API void app_init(AppMemory *memory) {
 
   cod_input_init(w);
   cod_flow_init(w);
+  cod_look_quality_init(w); // the bakes and the FX pools size from the start level
   cod_materials_init(w);
   cod_world_init(w);
   cod_player_init(w);

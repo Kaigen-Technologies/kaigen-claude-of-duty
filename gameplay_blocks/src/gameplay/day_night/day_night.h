@@ -74,6 +74,8 @@ ECS_COMPONENT(DayNightCycle) {
   f32 physical_sun_illuminance;  // DAY_NIGHT_SKY_PHYSICAL only: lux; 0 = 120000 (stylized: the palette's light)
   f32 physical_moon_illuminance; // DAY_NIGHT_SKY_PHYSICAL only: lux of the full moon; 0 = 0.25
   f32 physical_stars_luminance;  // DAY_NIGHT_SKY_PHYSICAL only: the brightest star, cd/m2; 0 = 4
+  b32 moon_declination_fixed;    // the moon keeps moon_declination_deg instead of riding the ecliptic (its phase still sets its hour)
+  f32 moon_declination_deg;
   HZ_RUNTIME u32 day;   // whole days the clock has run
 };
 

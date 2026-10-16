@@ -31,6 +31,7 @@
 #include "rendering/features/height_fog.h"
 #include "rendering/features/shadows.h"
 #include "rendering/features/ssr.h"
+#include "rendering/mesh_simplify.h"
 #include "rendering/renderer.h"
 #include "scene/scene.h"
 #include "ui/ui.h"
@@ -352,8 +353,9 @@ HZ_APP_API void app_update_and_render(AppMemory *memory) {
   }
   lane_sync();
 
-  // ALL lanes: the renderer records and submits in parallel
+  // ALL lanes: the trail ribbons, then the renderer records and submits in parallel
   if (cam) {
+    cod_fx_prepare(w, cam);
     renderer_update(ecs_resource_get_mut(w, RendererState), &(RendererBeginFrameDesc){
                                                                 .camera = cam,
                                                                 .clear_color = COD_CLEAR_COLOR,

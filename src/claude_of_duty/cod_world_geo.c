@@ -170,6 +170,90 @@ hz_internal aabb cw_geo_bounds(const CwGeo *g) {
   return b;
 }
 
+// a copy on al, sized to the source
+hz_internal CwGeo cw_geo_clone(Allocator *al, const CwGeo *src) {
+  CwGeo g = cw_geo_new(al, src->nv, src->ni);
+  mem_cpy(g.pos, src->pos, sizeof(v3) * src->nv);
+  mem_cpy(g.nrm, src->nrm, sizeof(v3) * src->nv);
+  mem_cpy(g.uv, src->uv, sizeof(v2) * src->nv);
+  mem_cpy(g.col, src->col, sizeof(v3) * src->nv);
+  mem_cpy(g.idx, src->idx, sizeof(u32) * src->ni);
+  g.nv = src->nv;
+  g.ni = src->ni;
+  g.has_col = src->has_col;
+  return g;
+}
+
+typedef struct CwSimplifyStats {
+  u32 tris_before, tris_after;
+  u32 verts_before, verts_after;
+  f32 error; // metres, as the simplifier measures it (position plus weighted attribute deviation)
+  f64 ms;    // wall time of the decimation
+} CwSimplifyStats;
+
+// quadric decimation to the triangle count `max_error` metres allows, into dst (room for g->ni); g is untouched
+hz_internal u32 cw_geo_simplify_indices(const CwGeo *g, u32 *dst, f32 max_error, u32 options, f32 *out_error) {
+  u32 ni = 0;
+  tctx_temp_allocator_scope(ta, NULL) {
+    // gltfpack's weights: normal 0.5, vertex colour 1.0, uv out (these props sample planar or triplanar, not mesh uv)
+    u32 count = g->has_col ? 6u : 3u;
+    f32 *weights = ALLOC_ARRAY_NO_ZERO(&ta.allocator, f32, count);
+    for (u32 k = 0; k < count; k++)
+      weights[k] = k < 3 ? 0.5f : 1.0f;
+    f32 *attribs = ALLOC_ARRAY_NO_ZERO(&ta.allocator, f32, g->nv * count);
+    for (u32 i = 0; i < g->nv; i++) {
+      f32 *a = attribs + i * count;
+      a[0] = g->nrm[i].x, a[1] = g->nrm[i].y, a[2] = g->nrm[i].z;
+      if (g->has_col)
+        a[3] = g->col[i].x, a[4] = g->col[i].y, a[5] = g->col[i].z;
+    }
+    ni = ms_simplify(dst, g->idx, g->ni, &g->pos[0].x, g->nv, sizeof(v3), attribs, count * (u32)sizeof(f32), weights, count, NULL, 0,
+                     max_error, MS_ERROR_ABSOLUTE | options, out_error, &ta.allocator);
+  }
+  return ni;
+}
+
+// decimates in place within `max_error` metres, then compacts the vertices in their original order; an empty result keeps the source
+hz_internal CwSimplifyStats cw_geo_simplify(CwGeo *g, f32 max_error) {
+  CwSimplifyStats st = {.tris_before = g->ni / 3, .tris_after = g->ni / 3, .verts_before = g->nv, .verts_after = g->nv};
+  if (g->ni < 3 || g->nv == 0)
+    return st;
+  u64 t0 = os_time_now();
+  tctx_temp_allocator_scope(ta, NULL) {
+    u32 *dst = ALLOC_ARRAY_NO_ZERO(&ta.allocator, u32, g->ni);
+    f32 err = 0.0f;
+    u32 ni = cw_geo_simplify_indices(g, dst, max_error, 0u, &err);
+    if (ni > 0 && ni < g->ni) {
+      const u32 unused = 0xffffffffu;
+      u32 *remap = ALLOC_ARRAY_NO_ZERO(&ta.allocator, u32, g->nv);
+      for (u32 i = 0; i < g->nv; i++)
+        remap[i] = unused;
+      for (u32 i = 0; i < ni; i++)
+        remap[dst[i]] = 0;
+      u32 nv = 0;
+      // new index <= old index, so the forward in-place move never overwrites an unread vertex
+      for (u32 i = 0; i < g->nv; i++) {
+        if (remap[i] == unused)
+          continue;
+        g->pos[nv] = g->pos[i];
+        g->nrm[nv] = g->nrm[i];
+        g->uv[nv] = g->uv[i];
+        g->col[nv] = g->col[i];
+        remap[i] = nv++;
+      }
+      for (u32 i = 0; i < ni; i++)
+        g->idx[i] = remap[dst[i]];
+      g->ni = ni;
+      g->nv = nv;
+      st.error = err;
+    }
+  }
+  st.tris_after = g->ni / 3;
+  st.verts_after = g->nv;
+  st.ms = os_ticks_to_ms(os_time_diff(os_time_now(), t0));
+  return st;
+}
+
 // merges two geometries: appends src (indices offset)
 hz_internal void cw_geo_append(CwGeo *dst, const CwGeo *src) {
   assert_msg(dst->nv + src->nv <= dst->cap_v && dst->ni + src->ni <= dst->cap_i, "cw geo: merge capacity");

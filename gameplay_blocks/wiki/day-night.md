@@ -12,7 +12,8 @@ updated: 2026-10-06
   (solar hours), `day_length` (real seconds per day, 0 stands), `paused`, `latitude_deg`, `day_of_year`,
   `north_yaw_deg`, `moon_phase`, `night_exposure`, `palette`, `light_step_deg`, `no_shadows`, and
   `physical_sun_illuminance` / `physical_moon_illuminance` / `physical_stars_luminance`, which only the physical sky
-  reads. Fields documented "0 =" take the default, so a component added in the editor works.
+  reads, and `moon_declination_fixed` / `moon_declination_deg`. Fields documented "0 =" take the default, so a
+  component added in the editor works.
 - What each field visibly does: `time_of_day` everything; `latitude_deg` / `day_of_year` the sun's height at a given
   hour (and so the mood), `north_yaw_deg` the compass direction of sun, moon and shadows; `moon_phase` where the moon
   is and how bright its light is (new moon: no key light, ambient only); `night_exposure` how bright night reads;
@@ -65,7 +66,9 @@ The starting template is the worked example.
 - **Astronomy**: sun on the ecliptic from `day_of_year` (declination, right ascension), hour angle from solar time,
   latitude tilts the pole, `north_yaw_deg` turns north (-Z at 0, east +X). The moon sits `moon_phase` x 360 deg east
   of the sun on the ecliptic (its 5 deg inclination left out); its brightness follows Allen's phase law (a quarter
-  moon is ~9 % of full). Stars use the same celestial rotation, so they turn about the pole.
+  moon is ~9 % of full). `moon_declination_fixed` holds the moon at `moon_declination_deg` instead (a stylized sky
+  that wants the moon up at a given hour); the phase still sets its hour angle and brightness. Stars use the same
+  celestial rotation, so they turn about the pole.
 - **Handoff** at -11 deg sun elevation, where twilight is about as bright as moonlight: the sun's weight fades over
   [-10, -11], the moon's in over [-11, -12]; the key body, sky disc and halo switch while both are near zero.
 - **Light stepping**: the light turns once the target is `light_step_deg` (default 0.25) away, so a moving sun costs

@@ -38,6 +38,8 @@ hz_internal void cod_contact_make_targets(RendererState *r, CodContact *c, u32 w
   c->ping = gpu_make_storage_texture(&desc);
   c->pong = gpu_make_storage_texture(&desc);
   c->block = (v4){1.0f / (f32)c->width, 1.0f / (f32)c->height, 0.0f, 0.0f};
+  // set here, not in prepare: prepare skips a feature that is not ready, and the surfaces bind the block regardless
+  renderer_set_uniforms(r, c->feature, "_CodContact", &c->block, sizeof(c->block));
   renderer_feature_publish(r, c->feature, "cod_contact", c->ping);
 }
 
@@ -54,13 +56,6 @@ hz_internal void cod_contact_blur_pass(CodContact *c, GpuTexture dst, GpuTexture
   shader_cod_post_contact_blur_apply_bindings((ShaderCodPostContactBlurBindings){.blur_out = dst, .src_tex = src});
   gpu_dispatch((c->width + 7u) / 8u, (c->height + 7u) / 8u, 1);
   gpu_texture_access(dst, GPU_ACCESS_SHADER_READ);
-}
-
-// the surfaces' block, set every frame so a disabled feature still binds it; the neutral white output stands in for the texture
-hz_internal void cod_contact_prepare(RendererState *r, const RendererPrepareCtx *ctx, void *user) {
-  UNUSED(ctx);
-  CodContact *c = (CodContact *)user;
-  renderer_set_uniforms(r, c->feature, "_CodContact", &c->block, sizeof(c->block));
 }
 
 // between the pre-pass and the lit pass: the march, then the horizontal and vertical blur
@@ -109,7 +104,6 @@ hz_internal CodContact *cod_contact_init(RendererState *r, Allocator *alloc) {
                                            .user = c,
                                            .record = {[RENDERER_PHASE_AFTER_DEPTH_PREPASS] = cod_contact_record},
                                            .reads = RENDERER_RESOURCE_DEPTH | RENDERER_RESOURCE_NORMALS,
-                                           .prepare = cod_contact_prepare,
                                            .resize = cod_contact_resize,
                                            .destroy = cod_contact_destroy,
                                            .ready = cod_contact_ready,

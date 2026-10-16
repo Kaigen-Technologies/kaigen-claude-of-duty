@@ -4,7 +4,6 @@
 #include "cod_sky_block.glsl"
 
 uniform _HzAtmosphere { SkyAtmosphere hz_atmosphere; };
-uniform _HzAtmosphereSky { mat4 hz_atmosphere_inv_view_proj_rot; };
 uniform _DrawParams { DrawParams hz_sky_draw; };
 
 @vs
@@ -15,7 +14,7 @@ out vec3 v_dir;
 void main() {
     vec2 uv = fullscreen_triangle_uv(uint(gl_VertexIndex));
     gl_Position = fullscreen_triangle_pos(uv, 0.0);
-    v_dir = (hz_atmosphere_inv_view_proj_rot * gl_Position).xyz;
+    v_dir = (hz_scene.inv_view_proj_rot * gl_Position).xyz; // per view: the sky samples by direction
 }
 @end
 

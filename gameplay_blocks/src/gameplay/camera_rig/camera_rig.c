@@ -392,7 +392,7 @@ hz_internal void camera_fp_step(EcsWorld *w, const CameraRigInput *in, Camera *c
   f32 bob_y = m_absf(m_sinf(fp->bob_phase)) * rig_or(fp->bob_height, 0.045f) * bob;
   f32 bob_x = m_cosf(fp->bob_phase) * rig_or(fp->bob_sway, 0.025f) * bob;
 
-  v3 eye = v3_add(twt->position, (v3){0.0f, t.eye_height, 0.0f});
+  v3 eye = v3_add(twt->position, (v3){0.0f, character_eye_height(&t, ch), 0.0f});
   eye.y += bob_y + fp->dip - ease * rig_or(fp->slump_drop, 1.25f);
   eye.x += m_cosf(fp->yaw) * bob_x;
   eye.z -= m_sinf(fp->yaw) * bob_x;

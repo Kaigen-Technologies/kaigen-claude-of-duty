@@ -117,8 +117,9 @@ ECS_COMPONENT(WorldUiLabel) {
 HZ_REFLECT()
 ECS_COMPONENT(WorldUiPrompt) {
   App_InputButtonType key; // KEY_MAX = none: no key cap, never triggers (a touch button does the action)
-  f32 range;    // ground-plane metres from the WorldUiInteractor; <=0 -> 10
+  f32 range;    // ground-plane metres from the WorldUiInteractor; <=0 -> 10 (aim select: metres along the ray)
   b32 enabled;
+  f32 hold_s;   // >0: the key is held this long to trigger (WorldUiScreen.hold_progress); 0 = a press
 };
 
 // tags the entity range is measured from (the player); needs a WorldTransform
@@ -138,8 +139,9 @@ typedef struct WorldUiScreen {
   b32 occluded;
   b32 visible;    // target visibility before easing: in front, in range, not occluded, prompt active
   b32 occ_checked;
-  b32 active;     // prompt: the nearest enabled one in range
-  b32 triggered;  // prompt: active and its key went down this frame
+  b32 active;     // prompt: the nearest enabled one in range (aim select: the one the camera ray hits)
+  b32 triggered;  // prompt: active and its key went down this frame, or its hold completed
+  f32 hold_progress; // prompt: 0..1 of hold_s while the key is held on it
 } WorldUiScreen;
 
 // a popup's lifetime and motion; spawn through world_ui_popup
@@ -179,7 +181,20 @@ typedef struct WorldUiDesc {
   HzHandleT(CollisionLayerHandle) occluder_layer; // invalid -> the static layer
   u32 occlusion_every;                            // frames between one widget's ray tests, staggered by entity; 0 -> 3
   f32 occlusion_margin;                           // the ray stops this short of the anchor, metres; <=0 -> 0.02
+  b32 aim_select;                                 // the prompt whose collider the camera's centre ray hits is active
+  HzHandleT(CollisionLayerHandle) aim_layer;      // the prompts' colliders (entity = the prompt entity); needs ecs_physics_init
+  PhysicsQueryFilter aim_filter;                  // zero = every body of the layer
+  f32 aim_reach;                                  // ray length in metres; <=0 -> 2.5
+  f32 press_buffer_s;                             // a press this many seconds before a prompt becomes active still counts
 } WorldUiDesc;
+
+// the interact button from the game (several keys, a pad button, a script); without it each prompt reads its key
+ECS_COMPONENT_TYPEDEF(WorldUiInput);
+typedef struct WorldUiInput {
+  b32 external;
+  b32 pressed; // went down this frame
+  b32 held;
+} WorldUiInput;
 
 // the frame's camera, published by the view system; screen is the UI's logical px
 ECS_COMPONENT_TYPEDEF(WorldUiView);
@@ -188,8 +203,16 @@ typedef struct WorldUiView {
   v3 cam_pos;
   v2 screen;
   CollisionLayer *occluders; // NULL when the layer is empty or occlusion is off
+  v3 cam_fwd;
   u32 frame;
   b32 valid;
+  EcsEntity aim_entity;      // aim select: the prompt entity the ray hit and no occluder hides, 0 = none
+  v3 aim_point;
+  f32 aim_distance;
+  EcsEntity active;          // the active prompt, 0 = none
+  EcsEntity hold_entity;     // the prompt being held, 0 = none
+  f32 hold_t;
+  f32 press_buffer;          // seconds a press stays usable
 } WorldUiView;
 
 ECS_COMPONENT_TYPEDEF(WorldUiSettings);
@@ -202,6 +225,10 @@ void world_ui_init(EcsWorld *w, const WorldUiDesc *desc);
 // inside the frame's ecs_scope after ecs_camera_schedule (and ecs_physics_schedule when occluding)
 void world_ui_schedule(EcsWorld *w);
 
+// main lane, before the scope: the game's interact button this frame (overrides the prompts' keys from then on)
+void world_ui_input(EcsWorld *w, b32 pressed, b32 held);
+// the active prompt entity (0 = none) and, under aim select, where the ray hit it
+EcsEntity world_ui_active_prompt(EcsWorld *w, v3 *aim_point);
 // adds WorldUi + WorldUiLabel to an entity; WorldUiScreen follows one flush later
 void world_ui_add(EcsWorld *w, EcsEntity e, const WorldUi *ui, const WorldUiLabel *label);
 // spawns a popup entity that destroys itself at the end of its life; callable from a system on any lane

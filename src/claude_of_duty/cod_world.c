@@ -30,6 +30,7 @@ typedef enum CwStage {
 
 typedef struct CwChunk {
   u32 key;
+  b32 no_shadow;
   CwGeo g;
   HzHandleT(RendererSubMesh) sub;
 } CwChunk;
@@ -67,7 +68,7 @@ typedef struct CodWorldBuild {
   ArenaAllocator *lane_blob[CW_MAX_LANES];
   // plan outputs
   u32 *cmd_chunk, *cmd_voff, *cmd_ioff;
-  u32 chunk_of[CW_KEY_COUNT * CW_TILE_N * CW_TILE_N];
+  u32 *chunk_of; // per (key, casts shadow, tile)
   DynArray(CwChunk) chunks;
   DynArray(CwColUnit) units;
   DynArray(CwColGroup) groups;
@@ -77,7 +78,6 @@ typedef struct CodWorldBuild {
   HzHandleT(RendererSubMesh) proto_sub[CWP_COUNT];
   HzHandleT(RendererMaterial) key_mat[CW_KEY_COUNT];
   b32 key_mat_ready[CW_KEY_COUNT];
-  EcsQuery *camera_q;
   // timing
   u64 t_total, t_phase;
   f64 ms_props, ms_ground, ms_buildings, ms_gate, ms_perimeter, ms_street, ms_dress, ms_scatter, ms_expand, ms_plan, ms_fill, ms_blob, ms_upload;
@@ -88,6 +88,9 @@ typedef struct CodWorldBuild {
 } CodWorldBuild;
 
 // ------------------------------------------------------------ expansion ------
+
+// ground patches and wall runoff lie ~1 cm over the surface they dress: as casters they only self-shadow it, by a coin flip of bias and texel size
+hz_internal b32 cw_spec_is_overlay(u32 kind) { return kind == CWS_PATCH || kind == CWS_RUNOFF; }
 
 // expands one deferred geometry on `al`; pure of its spec, so any lane can run it
 hz_internal CwGeo cw_expand_spec(const CwSpec *s, Allocator *al) {
@@ -150,7 +153,9 @@ hz_internal void cw_plan_statics(CodWorldBuild *b) {
   b->cmd_voff = ALLOC_ARRAY_NO_ZERO(&b->al, u32, n ? n : 1);
   b->cmd_ioff = ALLOC_ARRAY_NO_ZERO(&b->al, u32, n ? n : 1);
   b->chunks = dyn_arr_new_alloc(&b->al, CwChunk, 1024);
-  for (u32 i = 0; i < CW_KEY_COUNT * CW_TILE_N * CW_TILE_N; i++)
+  u32 slots = 2u * CW_KEY_COUNT * CW_TILE_N * CW_TILE_N;
+  b->chunk_of = ALLOC_ARRAY_NO_ZERO(&b->al, u32, slots);
+  for (u32 i = 0; i < slots; i++)
     b->chunk_of[i] = ~0u;
   for (u32 c = 0; c < n; c++) {
     const CwCmd *cmd = &A->cmds.items[c];
@@ -160,11 +165,13 @@ hz_internal void cw_plan_statics(CodWorldBuild *b) {
       continue;
     }
     m4 m = m4_mul(A->xform, cmd->xf);
-    u32 slot = (u32)cmd->key * CW_TILE_N * CW_TILE_N + cw_tile_of(m.m[3][0], m.m[3][2]);
+    u32 spec = A->geos.items[cmd->geo].spec;
+    b32 no_shadow = spec != ~0u && cw_spec_is_overlay(A->specs.items[spec].kind);
+    u32 slot = ((u32)cmd->key * 2u + (no_shadow ? 1u : 0u)) * CW_TILE_N * CW_TILE_N + cw_tile_of(m.m[3][0], m.m[3][2]);
     u32 ch = b->chunk_of[slot];
     if (ch == ~0u || b->chunks.items[ch].g.nv + g->nv > CW_CHUNK_MAX_V) {
       ch = b->chunks.len;
-      dyn_arr_append(b->chunks, ((CwChunk){.key = cmd->key}));
+      dyn_arr_append(b->chunks, ((CwChunk){.key = cmd->key, .no_shadow = no_shadow}));
       b->chunk_of[slot] = ch;
     }
     CwChunk *c2 = &b->chunks.items[ch];
@@ -355,6 +362,17 @@ hz_internal void cw_record_step(CodWorldBuild *b) {
   if (step == CW_STEP_PROPS) {
     cw_register_props(A, &b->rng);
     b->ms_props = cw_phase_ms(b);
+    for (u32 i = 0; i < CWP_COUNT; i++) {
+      const CwProto *p = &A->protos[i];
+      for (u32 l = 1; l < p->lod_count; l++)
+        log_info("world: % LOD% % -> % tris, error % mm against the source (this step % mm) in % ms", fmt_cstr(CW_PROTO_NAMES[i]), fmt_u32(l),
+                 fmt_u32(p->lod_simp[l - 1].tris_before), fmt_u32(p->lod_simp[l - 1].tris_after), fmt_f32_p(p->lod_err[l] * 1000.0f, 2),
+                 fmt_f32_p(p->lod_simp[l - 1].error * 1000.0f, 2), fmt_f64_p(p->lod_simp[l - 1].ms, 2));
+      if (p->simplify > 0.0f)
+        log_info("world: % decimated % -> % tris, % -> % verts, error % mm (limit % mm) in % ms", fmt_cstr(CW_PROTO_NAMES[i]), fmt_u32(p->simp.tris_before),
+                 fmt_u32(p->simp.tris_after), fmt_u32(p->simp.verts_before), fmt_u32(p->simp.verts_after), fmt_f32_p(p->simp.error * 1000.0f, 2),
+                 fmt_f32_p(p->simplify * 1000.0f, 2), fmt_f64_p(p->simp.ms, 2));
+    }
   } else if (step == CW_STEP_GROUND) {
     cw_build_ground(A, &b->rng);
     b->ms_ground = cw_phase_ms(b);
@@ -439,6 +457,21 @@ ecs_system(cod_world_cull_system, EcsIn(WorldTransform), EcsIn(CodPropCull), Ecs
   }
 }
 
+// every level of an instance measures the same nearest distance, so exactly one shows
+ecs_system(cod_world_lod_system, EcsIn(WorldTransform), EcsIn(CodPropLod), EcsInOut(EcsVisibility), EcsResIn(CodWorld)) {
+  const CodWorld *world = ecs_sys_get_resource(CodWorld);
+  v3 eye = world->lod_eye;
+  f32 k = world->lod_k * COD_LOD_ERROR_SAFETY;
+  for (i32 i = 0; i < it->count; i++) {
+    const CodPropLod *pl = ecs_sys_get_component(CodPropLod, i);
+    f32 dc = v3_length(v3_sub(ecs_sys_get_component(WorldTransform, i)->position, eye));
+    f32 d = m_maxf(0.0f, dc - pl->radius - COD_LOD_EYE_MARGIN);
+    b32 vis = d >= pl->err_lo * k && (pl->err_hi <= 0.0f || d < pl->err_hi * k) && (pl->max_dist <= 0.0f || dc < pl->max_dist + pl->radius);
+    if (ecs_sys_get_component(EcsVisibility, i)->visible != vis)
+      ecs_sys_get_component_mut(EcsVisibility, i)->visible = vis;
+  }
+}
+
 // the bulbs and lamps follow the solar altitude
 ecs_system(cod_world_light_system, EcsIn(CodWorldLight), EcsInOut(EcsPointLight), EcsResIn(CodLook)) {
   const CodLook *look = ecs_sys_get_resource(CodLook);
@@ -487,7 +520,7 @@ void cod_world_init(EcsWorld *w) {
   cod_rng_fork(&root);
   b->rng = cod_rng_fork(&root);
   b->A = cwa_begin(al);
-  b->camera_q = ecs_query_cached(w, EcsIn(Camera));
+  world.camera_q = ecs_query_cached(w, EcsIn(Camera));
   b->t_total = os_time_now();
   world.build = b;
   ecs_resource_set(w, CodWorld, world);
@@ -523,6 +556,7 @@ void cod_world_schedule(EcsWorld *w) {
   }
   if (world->ready) {
     ecs_schedule(w, cod_world_cull_system);
+    ecs_schedule(w, cod_world_lod_system);
     ecs_schedule(w, cod_world_light_system);
   }
 }
@@ -684,12 +718,24 @@ void cod_world_frame(EcsWorld *w) {
     world->lamp_mix = mix;
     cod_materials_set_emissive(w, world->lamp_lens, 0xffc47a, 9.0f * mix);
   }
+  Camera *cam = ecs_query_get_singleton(Camera, world->camera_q);
+  if (cam) {
+    world->cull_eye = cam->pos;
+    if (!world->lod_eye_set || v3_length(v3_sub(cam->pos, world->lod_eye)) > COD_LOD_EYE_STEP) {
+      world->lod_eye = cam->pos;
+      world->lod_eye_set = true;
+    }
+    // an error e spans COD_LOD_PIXELS of the display at distance e * proj[1][1] * display_h / (2 * COD_LOD_PIXELS)
+    RendererState *rs = ecs_resource_get_mut(w, RendererState);
+    u32 rw = 0, rh = 0;
+    renderer_render_size(rs, &rw, &rh);
+    f32 scale = renderer_render_scale(rs);
+    f32 display_h = scale > 0.0f ? (f32)rh / scale : (f32)rh;
+    world->lod_k = cam->proj.m[1][1] * display_h / (2.0f * COD_LOD_PIXELS);
+  }
   CodWorldBuild *b = world->build;
   if (!b)
     return;
-  Camera *cam = ecs_query_get_singleton(Camera, b->camera_q);
-  if (cam)
-    world->cull_eye = cam->pos;
   world->progress = b->progress;
   if (b->stage != CWB_UPLOAD)
     return;
@@ -709,7 +755,7 @@ void cod_world_frame(EcsWorld *w) {
     c->sub = cw_upload_geo(r, &c->g);
     EcsEntity e = ecs_renderer_spawn(w, r, &(EcsRendererSpawnDesc){.submesh = c->sub, .material = cw_key_material(b, w, r, c->key),
                                                                    .transform = {.position = V3_ZERO, .rotation = quat_identity(), .scale = (v3){1.0f, 1.0f, 1.0f}},
-                                                                   .casts_shadow = true, .static_shadow = true});
+                                                                   .casts_shadow = !c->no_shadow, .static_shadow = true});
     (void)e;
     world->static_tris += c->g.ni / 3;
   }
@@ -720,8 +766,11 @@ void cod_world_frame(EcsWorld *w) {
   }
   while (b->up_proto < CWP_COUNT) {
     CwProto *p = &A->protos[b->up_proto];
-    if (p->defined && p->count > 0 && p->geo.nv > 0)
+    if (p->defined && p->count > 0 && p->geo.nv > 0) {
       b->proto_sub[b->up_proto] = cw_upload_geo(r, &p->geo);
+      for (u32 l = 1; l < p->lod_count; l++)
+        p->lod_sub[l - 1] = cw_upload_geo(r, &p->lods[l - 1]);
+    }
     b->up_proto++;
   }
   while (b->up_inst < A->insts.len && os_time_diff(os_time_now(), t0) < budget_ticks) {
@@ -731,10 +780,17 @@ void cod_world_frame(EcsWorld *w) {
       continue;
     m4 m = m4_mul(A->xform, cw_trs(in->pos.x, in->pos.y, in->pos.z, in->ry, 1.0f, 1.0f, 1.0f, in->rx, in->rz));
     Transform tr = {.position = (v3){m.m[3][0], m.m[3][1], m.m[3][2]}, .rotation = quat_from_m4(m), .scale = in->scale};
-    EcsEntity e = ecs_renderer_spawn(w, r, &(EcsRendererSpawnDesc){.submesh = b->proto_sub[in->proto], .material = cw_key_material(b, w, r, p->key),
-                                                                   .transform = tr, .casts_shadow = p->cast_shadow, .static_shadow = true});
-    if (p->max_dist > 0.0f)
-      ecs_component_set(w, e, CodPropCull, {.max_dist = p->max_dist, .radius = cw_proto_radius(&p->geo) * m_maxf(in->scale.x, m_maxf(in->scale.y, in->scale.z))});
+    f32 radius = cw_proto_radius(&p->geo) * m_maxf(in->scale.x, m_maxf(in->scale.y, in->scale.z));
+    HzHandleT(RendererMaterial) mat = cw_key_material(b, w, r, p->key);
+    for (u32 l = 0; l < p->lod_count; l++) {
+      EcsEntity e = ecs_renderer_spawn(w, r, &(EcsRendererSpawnDesc){.submesh = l == 0 ? b->proto_sub[in->proto] : p->lod_sub[l - 1], .material = mat,
+                                                                     .transform = tr, .casts_shadow = p->cast_shadow, .static_shadow = true, .hidden = l > 0});
+      if (p->lod_count > 1)
+        ecs_component_set(w, e, CodPropLod,
+                          {.err_lo = l == 0 ? 0.0f : p->lod_err[l], .err_hi = l + 1 < p->lod_count ? p->lod_err[l + 1] : 0.0f, .max_dist = p->max_dist, .radius = radius});
+      else if (p->max_dist > 0.0f)
+        ecs_component_set(w, e, CodPropCull, {.max_dist = p->max_dist, .radius = radius});
+    }
     world->instances++;
     world->instance_tris += p->geo.ni / 3;
   }

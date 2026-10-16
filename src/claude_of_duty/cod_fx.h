@@ -42,5 +42,7 @@ void cod_fx_init(EcsWorld *w);
 void cod_fx_schedule(EcsWorld *w);
 // main lane after the scope: GPU work the effects record (atlas bakes), the requests played, the particle systems updated
 void cod_fx_frame(EcsWorld *w);
+// ALL lanes, after the lane_sync past cod_fx_frame and before renderer_update: the lanes build the trail ribbons
+void cod_fx_prepare(EcsWorld *w, const Camera *cam);
 // every lane, before the scope: bulk parallel work (lane_range + balanced lane_sync; lane-uniform conditions only)
 void cod_fx_lanes(EcsWorld *w);

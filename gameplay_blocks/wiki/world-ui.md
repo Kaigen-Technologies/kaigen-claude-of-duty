@@ -13,8 +13,13 @@ updated: 2026-10-01
   `offset`, or a screen position when `screen_anchored`. `WorldUiScreen` holds the result each frame (`pos`, `distance`,
   `alpha`, `visible`, `occluded`, `clamped`, `angle`, `active`, `triggered`).
 - Kinds: `WORLD_UI_NAMETAG` (name, sub line, optional fill bar always or `ON_HIT`), `WORLD_UI_POPUP`, `WORLD_UI_PROMPT`
-  (`WorldUiPrompt {key, range, enabled}`; the nearest enabled one in range of the `WorldUiInteractor` is active and
-  reports `triggered` on its key press), `WORLD_UI_PIN`.
+  (`WorldUiPrompt {key, range, enabled, hold_s}`; the nearest enabled one in range of the `WorldUiInteractor` is active
+  and reports `triggered` on its key press, or after `hold_s` seconds held with `hold_progress` 0..1), `WORLD_UI_PIN`.
+- Aim select (`WorldUiDesc.aim_select`, `aim_layer`, `aim_filter`, `aim_reach`): the prompt whose collider the camera's
+  centre ray hits is active instead of the nearest, hidden by the occluder layer when `occlusion` is on. Each prompt
+  entity carries its own collider in `aim_layer`. `world_ui_active_prompt(w, &hit)` gives the entity and hit point.
+- `world_ui_input(w, pressed, held)` (main lane, before the scope) hands world_ui the game's interact button (several
+  keys, a pad button, a script) in place of each prompt's key; `press_buffer_s` keeps a press usable for a moment.
 - `world_ui_popup(w, &desc)` spawns a self-destroying popup entity from any system (rise, drift, enter and fade
   phases, scatter, stack group); this replaces the value-popup and damage-number blocks.
 - `world_ui_layout(w, ui, &style)` draws the kinds in `style.kinds`; a kind left out is yours to draw from
@@ -43,6 +48,8 @@ const WorldUiScreen *s = world_ui_screen(w, pin);
 - Occlusion rays are staggered per widget (`occlusion_every` frames) and stop `occlusion_margin` metres short of the
   anchor; without `ecs_physics_init` leave `occlusion` off.
 - A screen-anchored prompt ignores range: it is active while `enabled`.
+- `triggered` and `hold_progress` are this frame's consolidate result: a system scheduled before `world_ui_schedule`
+  reads last frame's (graveyard-shift's `gs_focus_system` orders itself by reading the `WorldUiView` resource).
 - Stacking pushes overlapping boxes of one `stack_group` up and keeps the offset unless `stack_relax` settles it back.
 - The view is the scene `Camera`'s matrices and the OS canvas size: a UI that renders to a smaller target needs its own
   projection.

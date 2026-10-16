@@ -226,5 +226,8 @@ void cod_fx_frame(EcsWorld *w) {
   vfx_frame(w, cam, clock->dt);
   particle_system_update(ps, &(ParticleSystemFlushDesc){.delta_time = clock->dt, .camera = cam});
   trail_system_update(s->trails, clock->dt);
-  trail_system_prepare(s->trails, cam);
+}
+
+void cod_fx_prepare(EcsWorld *w, const Camera *cam) {
+  trail_system_prepare(ecs_resource_get(w, CodFxRuntime)->trails, cam);
 }

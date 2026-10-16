@@ -318,6 +318,7 @@ void surface_gui_text_draw(EcsWorld *w) {
 #define WORLD_UI_OCCLUSION_DEFAULT_EVERY 3u
 #define WORLD_UI_OCCLUSION_DEFAULT_MARGIN 0.02f
 #define WORLD_UI_STACK_MAX 256
+#define WORLD_UI_AIM_DEFAULT_REACH 2.5f
 
 void world_ui_init(EcsWorld *w, const WorldUiDesc *desc) {
   WorldUiDesc d = desc ? *desc : (WorldUiDesc){0};
@@ -325,8 +326,26 @@ void world_ui_init(EcsWorld *w, const WorldUiDesc *desc) {
     d.occlusion_every = WORLD_UI_OCCLUSION_DEFAULT_EVERY;
   if (d.occlusion_margin <= 0.0f)
     d.occlusion_margin = WORLD_UI_OCCLUSION_DEFAULT_MARGIN;
+  if (d.aim_reach <= 0.0f)
+    d.aim_reach = WORLD_UI_AIM_DEFAULT_REACH;
   ecs_resource_set(w, WorldUiSettings, {.desc = d});
   ecs_resource_set_zero(w, WorldUiView);
+  ecs_resource_set_zero(w, WorldUiInput);
+}
+
+void world_ui_input(EcsWorld *w, b32 pressed, b32 held) {
+  WorldUiInput *in = ecs_resource_get_mut(w, WorldUiInput);
+  assert_msg(in, "world_ui_input: world_ui_init not called");
+  *in = (WorldUiInput){.external = true, .pressed = pressed, .held = held};
+}
+
+EcsEntity world_ui_active_prompt(EcsWorld *w, v3 *aim_point) {
+  const WorldUiView *view = ecs_resource_get(w, WorldUiView);
+  if (!view)
+    return 0;
+  if (aim_point)
+    *aim_point = view->aim_point;
+  return view->active;
 }
 
 void world_ui_add(EcsWorld *w, EcsEntity e, const WorldUi *ui, const WorldUiLabel *label) {
@@ -393,6 +412,7 @@ ecs_system(world_ui_view_system, EcsIn(Camera), EcsResInOut(WorldUiView)) {
     const Camera *cam = ecs_sys_get_component(Camera, i);
     view->view_proj = cam->view_proj;
     view->cam_pos = cam->pos;
+    view->cam_fwd = camera_forward(cam);
     view->valid = true;
   }
   ScreenDesc screen = os_get_screen_desc();
@@ -407,6 +427,39 @@ ecs_system(world_ui_occluder_system, EcsResInOut(WorldUiView), EcsResIn(EcsPhysi
   HzHandleT(CollisionLayerHandle) layer = handle_is_valid(st->desc.occluder_layer) ? st->desc.occluder_layer : phys->static_layer;
   const EcsCollisionLayerEntry *entry = ha_get(&phys->layers, HANDLE_CAST(HzHandle, layer), EcsCollisionLayerEntry);
   view->occluders = entry && entry->layer.layer.count > 0 ? (CollisionLayer *)&entry->layer.layer : NULL;
+}
+
+// aim select: the prompt collider under the camera's centre ray within reach, unless an occluder is in front of it
+ecs_system(world_ui_aim_system, EcsResInOut(WorldUiView), EcsResIn(EcsPhysicsWorld), EcsResIn(WorldUiSettings)) {
+  WorldUiView *view = ecs_sys_get_resource_mut(WorldUiView);
+  const WorldUiSettings *st = ecs_sys_get_resource(WorldUiSettings);
+  view->aim_entity = 0;
+  const EcsCollisionLayer *aim = ecs_physics_get_layer(it->world, st->desc.aim_layer);
+  if (!view->valid || !aim || aim->layer.count == 0)
+    return;
+  f32 reach = st->desc.aim_reach;
+  v3 start = view->cam_pos;
+  PhysicsRaycastResult hit = {0};
+  i32 body = -1;
+  if (!physics_raycast_layer(start, v3_add(start, v3_scale(view->cam_fwd, reach)), (CollisionLayer *)&aim->layer,
+                             st->desc.aim_filter, &hit, &body) ||
+      body < 0)
+    return;
+  f32 dist = hit.fraction * reach;
+  if (st->desc.occlusion) {
+    const EcsCollisionLayer *occ = handle_is_valid(st->desc.occluder_layer)
+                                       ? ecs_physics_get_layer(it->world, st->desc.occluder_layer)
+                                       : ecs_physics_get_static_layer(it->world);
+    PhysicsRaycastResult oh = {0};
+    i32 ob = -1;
+    if (occ && occ->layer.count > 0 &&
+        physics_raycast_layer(start, hit.position, (CollisionLayer *)&occ->layer, PHYSICS_QUERY_FILTER_ALL, &oh, &ob) &&
+        oh.fraction * dist < dist - st->desc.occlusion_margin)
+      return;
+  }
+  view->aim_entity = aim->entities[body];
+  view->aim_point = hit.position;
+  view->aim_distance = dist;
 }
 
 hz_internal f32 world_ui_ease_out_quad(f32 t) { return 1.0f - (1.0f - t) * (1.0f - t); }
@@ -553,10 +606,15 @@ hz_internal void world_ui_stack(WorldUiStackItem *items, u32 n, f32 dt) {
   }
 }
 
-// one task after the projection: the nearest prompt, key edges, eased visibility and stacking
-ecs_system(world_ui_consolidate_system, EcsResInOut(WorldUiView), EcsResIn(InputSystem)) {
+// one task after the projection: the active prompt, press and hold, eased visibility and stacking
+ecs_system(world_ui_consolidate_system, EcsResInOut(WorldUiView), EcsResIn(InputSystem), EcsResIn(WorldUiInput),
+           EcsResIn(WorldUiSettings)) {
   EcsWorld *w = it->world;
   const InputSystem *input = ecs_sys_get_resource(InputSystem);
+  const WorldUiInput *game_in = ecs_sys_get_resource(WorldUiInput);
+  const WorldUiSettings *st = ecs_sys_get_resource(WorldUiSettings);
+  WorldUiView *view = ecs_sys_get_resource_mut(WorldUiView);
+  b32 aim = st->desc.aim_select;
   f32 dt = it->delta_time;
 
   EcsQuery *iq = ecs_query(w, EcsIn(WorldUiInteractor), EcsIn(WorldTransform));
@@ -573,6 +631,7 @@ ecs_system(world_ui_consolidate_system, EcsResInOut(WorldUiView), EcsResIn(Input
                           EcsOptional(WorldTransform));
   WorldUiScreen *nearest = NULL;
   const WorldUiPrompt *nearest_prompt = NULL;
+  EcsEntity nearest_e = 0;
   f32 nearest_d = 1.0e30f;
   TempAllocator ta = tctx_temp_allocator_begin(NULL);
   WorldUiStackItem *items = ALLOC_ARRAY(&ta.allocator, WorldUiStackItem, WORLD_UI_STACK_MAX);
@@ -586,6 +645,16 @@ ecs_system(world_ui_consolidate_system, EcsResInOut(WorldUiView), EcsResIn(Input
       WorldUiScreen *s = &ss[i];
       s->triggered = false;
       s->active = false;
+      s->hold_progress = 0.0f;
+      if (aim) {
+        if (prompts && us[i].kind == WORLD_UI_PROMPT && prompts[i].enabled && qit.entities[i] == view->aim_entity &&
+            view->aim_distance <= (prompts[i].range > 0.0f ? prompts[i].range : WORLD_UI_PROMPT_DEFAULT_RANGE)) {
+          nearest = s;
+          nearest_prompt = &prompts[i];
+          nearest_e = qit.entities[i];
+        }
+        continue;
+      }
       if (prompts && us[i].kind == WORLD_UI_PROMPT && prompts[i].enabled && s->visible &&
           (have_interactor || us[i].screen_anchored)) {
         f32 d = 0.0f;
@@ -600,21 +669,66 @@ ecs_system(world_ui_consolidate_system, EcsResInOut(WorldUiView), EcsResIn(Input
           nearest_d = d;
           nearest = s;
           nearest_prompt = &prompts[i];
+          nearest_e = qit.entities[i];
         }
       }
     }
   }
+  b32 pressed = false, held = false;
+  if (game_in->external) {
+    pressed = game_in->pressed;
+    held = game_in->held;
+  } else if (nearest && nearest_prompt->key < KEY_MAX) {
+    pressed = input->buttons[nearest_prompt->key].pressed_this_frame;
+    held = input->buttons[nearest_prompt->key].is_pressed;
+  }
+  b32 press = pressed || view->press_buffer > 0.0f;
+  b32 used = false;
+  view->active = nearest_e;
   if (nearest) {
     nearest->active = true;
-    nearest->triggered = nearest_prompt->key < KEY_MAX && input->buttons[nearest_prompt->key].pressed_this_frame;
+    if (nearest_prompt->hold_s > 0.0f) {
+      // a hold starts with a press on this prompt (or a buffered one) and keeps going while held
+      if (held && (view->hold_entity == nearest_e || press)) {
+        if (view->hold_entity != nearest_e)
+          view->hold_t = 0.0f;
+        view->hold_entity = nearest_e;
+        view->hold_t += dt;
+        used = true;
+        if (view->hold_t >= nearest_prompt->hold_s) {
+          nearest->triggered = true;
+          view->hold_entity = 0;
+          view->hold_t = 0.0f;
+        } else {
+          nearest->hold_progress = view->hold_t / nearest_prompt->hold_s;
+        }
+      } else {
+        view->hold_entity = 0;
+        view->hold_t = 0.0f;
+      }
+    } else {
+      view->hold_entity = 0;
+      view->hold_t = 0.0f;
+      nearest->triggered = press;
+      used = press;
+    }
+  } else {
+    view->hold_entity = 0;
+    view->hold_t = 0.0f;
   }
+  if (used)
+    view->press_buffer = 0.0f;
+  else if (pressed)
+    view->press_buffer = st->desc.press_buffer_s;
+  else
+    view->press_buffer = m_maxf(0.0f, view->press_buffer - dt);
   ecs_query_foreach(q, qit) {
     const WorldUi *us = ecs_iter_get_component(&qit, WorldUi, 0);
     WorldUiScreen *ss = ecs_iter_get_component(&qit, WorldUiScreen, 1);
     const WorldUiPopup *pops = ecs_iter_get_component(&qit, WorldUiPopup, 2);
     for (i32 i = 0; i < qit.count; i++) {
       WorldUiScreen *s = &ss[i];
-      b32 visible = s->visible && (us[i].kind != WORLD_UI_PROMPT || s->active);
+      b32 visible = us[i].kind == WORLD_UI_PROMPT ? s->active && (aim || s->visible) : s->visible;
       s->visible = visible;
       f32 target = visible ? 1.0f : 0.0f;
       if (us[i].fade_s <= 0.0f)
@@ -639,6 +753,8 @@ void world_ui_schedule(EcsWorld *w) {
   ecs_schedule_single(w, world_ui_view_system);
   if (st->desc.occlusion)
     ecs_schedule_single(w, world_ui_occluder_system);
+  if (st->desc.aim_select)
+    ecs_schedule_single(w, world_ui_aim_system);
   ecs_schedule(w, world_ui_project_system);
   ecs_schedule_single(w, world_ui_consolidate_system);
 }

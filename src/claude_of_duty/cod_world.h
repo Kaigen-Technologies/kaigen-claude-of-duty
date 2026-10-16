@@ -10,6 +10,10 @@
 #define COD_LEVEL_YAW 0.5877f
 #define COD_LEVEL_TX 0.9f
 #define COD_LEVEL_TZ 1.34f
+#define COD_LOD_PIXELS 1.0f     // the display error a prop LOD may reach
+#define COD_LOD_EYE_STEP 0.5f    // metres the camera moves before prop LODs re-measure
+#define COD_LOD_EYE_MARGIN 1.0f  // metres the measure gives away: that step plus a frame of the fastest motion
+#define COD_LOD_ERROR_SAFETY 1.5f // the simplifier's error under-reads the true deviation by up to 1.36x (measured)
 
 #define COD_WORLD_MAX_SPAWNS 16
 #define COD_WORLD_MAX_BUILDINGS 32
@@ -50,7 +54,11 @@ typedef struct CodWorld {
   u32 instances;
   f64 build_ms;         // wall time of the build
   struct CodWorldBuild *build; // the world's private build state
+  EcsQuery *camera_q;   // the camera the eyes follow, for the world's lifetime
   v3 cull_eye;          // the camera the prop distance cull measures from, written by the world's frame hook
+  v3 lod_eye;           // where prop LODs measure from: follows the camera once it is COD_LOD_EYE_SLACK away
+  b32 lod_eye_set;
+  f32 lod_k;            // metres of distance per metre of mesh error at which that error spans COD_LOD_PIXELS
   HzHandleT(RendererMaterial) lamp_lens; // the street-lamp diffuser, its emission follows the solar altitude
   f32 lamp_mix;         // the lamps' last applied night mix
 } CodWorld;
@@ -61,6 +69,15 @@ HZ_REFLECT()
 ECS_COMPONENT(CodPropCull) {
   f32 max_dist;
   f32 radius; // the prototype's bounding radius, so a big prop stays until it is wholly out
+};
+
+// one LOD level of a prop instance: shown from where its error drops under COD_LOD_PIXELS until the next level's does
+HZ_REFLECT()
+ECS_COMPONENT(CodPropLod) {
+  f32 err_lo;   // metres: this level's error against the source mesh (0 for the source)
+  f32 err_hi;   // metres: the next coarser level's error; 0 = the coarsest level
+  f32 max_dist; // metres: hidden past this distance (0 = never)
+  f32 radius;   // the prototype's bounding radius times the instance scale
 };
 
 // a practical the world owns: 0 = interior bulb, 1 = street lamp; its intensity follows the solar altitude

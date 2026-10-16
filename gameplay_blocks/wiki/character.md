@@ -17,6 +17,9 @@ updated: 2026-10-03
 - `CharacterInput` is the per-frame intent the game writes: `move` (in the heading frame), `heading`, `run`, `jump`, `teleport`,
   `add_velocity` (jump pad, knockback). `Character` is runtime state; its counters (`jumps`, `landings`, `footsteps`, `launches`,
   `teleports`) only grow, so a consumer diffs against the value it saw last.
+- Crouch: `crouch_height` > 0 enables it. `CharacterInput.crouch` held drops the capsule to `crouch_height` at
+  `crouch_speed` with no running; releasing it stands only when a capsule cast up finds room. `Character.crouched` and the
+  eased `crouch_k` are the state; `character_eye_height(t, c)` is the eye the first-person rig uses.
 - Platforms: the character rides the body it stands on and carries its pose delta; `CharacterOneWay` marks a
   platform solid from above only; `CharacterSurface{local_velocity}` makes a conveyor or bounce pad.
 - `character_avatar_add` attaches a skinned model with idle, run and fall clips driven from the `Character` state (default model in

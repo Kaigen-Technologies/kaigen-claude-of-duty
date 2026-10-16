@@ -58,6 +58,8 @@ lock on touch: the match plays as soon as it loads. Phones start on the High pre
 GPU during the match and steps the preset down or up to hold 60 fps. Picking a preset in the pause menu fixes it;
 Defaults hands it back to dynamic quality.
 
-`web/` is the comparison page published at kaigen3d.com. `web/threejs/` is the original game built from [d9b237b](https://github.com/mshumer/Claude-of-Duty/commit/d9b237b)
-(`vite build --base ./`) with one addition, the same frame-rate panel the Kaigen version draws, so the two can be
-compared. MIT licensed by its author.
+`web/` is the comparison page published at kaigen3d.com. `web/threejs/` is the original game built from our fork,
+[Kaigen-Technologies/Claude-of-Duty@6e557fb](https://github.com/Kaigen-Technologies/Claude-of-Duty/commit/6e557fb)
+(`vite build --base ./`), which adds three things to [mshumer's original](https://github.com/mshumer/Claude-of-Duty) so
+the two can be compared fairly: three.js updated to r186, the same frame-rate panel the Kaigen version draws, and a start
+preset picked from the hardware with the Kaigen engine's web rules instead of always Ultra. MIT licensed by its author.

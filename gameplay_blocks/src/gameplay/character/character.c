@@ -66,10 +66,23 @@ CharacterTuning character_tuning_resolve(CharacterTuning t) {
   CHAR_DEFAULT(t.swim_depth, 1.25f);
   CHAR_DEFAULT(t.swim_speed_scale, 0.6f);
   CHAR_DEFAULT(t.buoyancy, 6.0f);
+  if (t.crouch_height > 0.0f) {
+    t.crouch_height = m_clampf(t.crouch_height, 2.0f * t.radius, t.height);
+    CHAR_DEFAULT(t.crouch_eye_height, m_maxf(t.eye_height - (t.height - t.crouch_height), t.radius));
+    CHAR_DEFAULT(t.crouch_speed, t.walk_speed * 0.5f);
+    CHAR_DEFAULT(t.crouch_ease_s, 0.18f);
+  }
   return t;
 }
 
 f32 character_stand_height(const CharacterTuning *tuning) { return character_tuning_resolve(*tuning).height; }
+
+f32 character_eye_height(const CharacterTuning *t, const Character *c) {
+  if (!c || t->crouch_height <= 0.0f)
+    return t->eye_height;
+  f32 k = c->crouch_k * c->crouch_k * (3.0f - 2.0f * c->crouch_k);
+  return m_lerpf(t->eye_height, t->crouch_eye_height, k);
+}
 
 f32 character_planar_speed(const Character *c) { return m_sqrtf(c->velocity.x * c->velocity.x + c->velocity.z * c->velocity.z); }
 
@@ -667,6 +680,35 @@ hz_internal void char_kinematic_take_outside_write(Character *c, const WorldTran
   c->teleports++;
 }
 
+// crouch: the capsule drops to crouch_height while the input holds it or the standing capsule has no room; no running
+// crouched. Writes the step's height and speeds into the resolved copy `t`.
+hz_internal void char_crouch(EcsWorld *w, CharacterTuning *t, Character *c, CharacterInput *in, f32 dt) {
+  if (t->crouch_height <= 0.0f || t->crouch_height >= t->height) {
+    c->crouched = false;
+    c->crouch_k = 0.0f;
+    return;
+  }
+  b32 want = in->crouch;
+  if (!want && c->crouched) {
+    CharacterTuning low = *t;
+    low.height = t->crouch_height;
+    CharEnv env = char_env_make(w, &low, c->position.y);
+    ColliderCastResult r = {0};
+    EcsEntity ent = 0;
+    v3 up = {0.0f, t->height - t->crouch_height + CHAR_SKIN, 0.0f};
+    if (char_cast(&env, c->position, v3_add(c->position, up), &r, &ent))
+      want = true;
+  }
+  c->crouched = want;
+  c->crouch_k = m_saturatef(c->crouch_k + (want ? dt : -dt) / t->crouch_ease_s);
+  if (want) {
+    t->height = t->crouch_height;
+    t->walk_speed = t->crouch_speed;
+    t->run_speed = t->crouch_speed;
+    in->run = false;
+  }
+}
+
 hz_internal void char_kinematic_step(EcsWorld *w, const CharacterTuning *t, Character *c, CharacterInput *in,
                                      const WorldTransform *wt, f32 dt) {
   if (!c->placed) {
@@ -724,7 +766,7 @@ hz_internal void char_kinematic_step(EcsWorld *w, const CharacterTuning *t, Char
     disp = (v3){vel.x * dt, -(gn.x * vel.x + gn.z * vel.z) * dt / gn.y, vel.z * dt};
     disp = v3_add(disp, ground_move);
   }
-  v3 begin = pos;
+  v3 begin = pos, vel_in = vel;
   char_slide(&env, &pos, &vel, disp, walk, &ct);
 
   if (walk && ct.wall) {
@@ -732,10 +774,20 @@ hz_internal void char_kinematic_step(EcsWorld *w, const CharacterTuning *t, Char
     f32 want = v3_length(horiz);
     v3 got = {pos.x - begin.x, 0.0f, pos.z - begin.z};
     v3 stepped;
-    if (want > 1e-4f && v3_length(got) < want * 0.9f && char_step_up(&env, t, begin, horiz, &stepped)) {
+    // from where the slide stopped (WalkStairs), at least until the lip's contact is walkable: a high step rate never overhangs the edge
+    f32 reach = t->radius * (1.0f - m_sqrtf(1.0f - env.cos_slope * env.cos_slope)) + 2.0f * CHAR_SKIN;
+    f32 rest = m_maxf(want - v3_length(got), reach);
+    // a move that ends against the riser keeps its length but loses its speed: that is blocked too
+    f32 kept = vel.x * vel_in.x + vel.z * vel_in.z, had = vel_in.x * vel_in.x + vel_in.z * vel_in.z;
+    b32 blocked = v3_length(got) < want * 0.9f || kept < had * 0.81f;
+    if (want > 1e-4f && blocked && char_step_up(&env, t, pos, v3_scale(horiz, rest / want), &stepped)) {
       v3 sh = {stepped.x - begin.x, 0.0f, stepped.z - begin.z};
-      if (v3_length(sh) > v3_length(got) + 0.01f)
+      if (v3_length(sh) > v3_length(got) + 0.01f) {
+        // the step went over the riser, so the slide's stop against it does not stand
         pos = stepped;
+        vel.x = vel_in.x;
+        vel.z = vel_in.z;
+      }
     }
   }
   char_depenetrate(&env, &pos, &vel, walk, &ct);
@@ -799,8 +851,10 @@ ecs_system(character_kinematic_system, EcsIn(CharacterTuning), EcsInOut(Characte
     if (raw->mover != CHARACTER_MOVER_KINEMATIC)
       continue;
     CharacterTuning t = character_tuning_resolve(*raw);
-    char_kinematic_step(it->world, &t, ecs_sys_get_component_mut(Character, i), ecs_sys_get_component_mut(CharacterInput, i),
-                        ecs_sys_get_component(WorldTransform, i), it->delta_time);
+    Character *c = ecs_sys_get_component_mut(Character, i);
+    CharacterInput *in = ecs_sys_get_component_mut(CharacterInput, i);
+    char_crouch(it->world, &t, c, in, it->delta_time);
+    char_kinematic_step(it->world, &t, c, in, ecs_sys_get_component(WorldTransform, i), it->delta_time);
   }
 }
 
@@ -906,10 +960,15 @@ ecs_system(character_rigidbody_system, EcsIn(CharacterTuning), EcsInOut(Characte
     if (raw->mover != CHARACTER_MOVER_RIGIDBODY)
       continue;
     CharacterTuning t = character_tuning_resolve(*raw);
-    char_rigidbody_step(it->world, &t, ecs_sys_get_component_mut(Character, i), ecs_sys_get_component_mut(CharacterInput, i),
-                        ecs_sys_get_component_mut(RigidBody, i), ecs_sys_get_component_mut(RigidBodySleep, i),
-                        ecs_sys_get_component_mut(ColliderBody, i), ecs_sys_get_component_mut(WorldTransform, i), gravity,
-                        it->delta_time);
+    Character *c = ecs_sys_get_component_mut(Character, i);
+    CharacterInput *in = ecs_sys_get_component_mut(CharacterInput, i);
+    ColliderBody *cb = ecs_sys_get_component_mut(ColliderBody, i);
+    b32 was = c->crouched;
+    char_crouch(it->world, &t, c, in, it->delta_time);
+    if (was != c->crouched)
+      cb->collider = collider_capsule((v3){0.0f, t.radius, 0.0f}, (v3){0.0f, t.height - t.radius, 0.0f}, t.radius);
+    char_rigidbody_step(it->world, &t, c, in, ecs_sys_get_component_mut(RigidBody, i), ecs_sys_get_component_mut(RigidBodySleep, i),
+                        cb, ecs_sys_get_component_mut(WorldTransform, i), gravity, it->delta_time);
   }
 }
 

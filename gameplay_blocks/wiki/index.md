@@ -58,6 +58,17 @@ the scene's ambient and fog; drives `hz_stylized_sky` or `hz_atmosphere`. `day_n
 `DayNightState` (`sunrise`/`sunset` edges). Page: [day-night.md](day-night.md). Does NOT: advance seasons or the
 moon's phase, or own weather.
 
+**stamina** — a run meter on a character: a run drains it, rest refills it after a delay, and empty (or below
+`recover_at` when a run would start) clears `CharacterInput.run`. `stamina_add(w, e, &tuning)`, `stamina_schedule(w)`
+in the fixed step after the game's `CharacterInput` write and before `character_schedule_fixed`; the HUD reads
+`Stamina.value`. Page: [stamina.md](stamina.md). Does NOT: decide when the player wants to run, or draw a bar.
+
+**stalker** — an enemy character that sees (range, cone, line of sight) and hears (`stalker_noise_emit`) `StalkerTarget`
+entities, decides idle / investigate / chase / search, paths over the engine navmesh and steers its `CharacterInput`.
+`stalker_init(w, agent)` after `ecs_navigation_init`, `stalker_add` per character; in the scope `stalker_schedule`, the
+game's own states, then `stalker_schedule_move` before `character_schedule_fixed`. `Stalker.held` hands one to the game.
+Page: [stalker.md](stalker.md). Does NOT: attack, animate, or open doors.
+
 **vfx** — composed effects: N elements (particles, a pooled flash light, a trail, a beam, a decal) played as one
 thing on a stagger, and loops for continuous ones. `vfx_init` + `vfx_register(&VfxDesc)` once; systems on any lane call
 `vfx_request(rq, asset, &VfxPlayDesc)` through the `VfxRequests` resource, the main lane drains it in `vfx_frame`.

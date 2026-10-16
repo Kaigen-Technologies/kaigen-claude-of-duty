@@ -94,6 +94,10 @@ ECS_COMPONENT(CharacterTuning) {
   f32 swim_speed_scale;  // 0 -> 0.6
   f32 buoyancy;          // 1/s rate toward the float height; 0 -> 6
   b32 disable_riding;    // true: stand still in world space on moving platforms
+  f32 crouch_height;     // feet to head while crouched; 0 = no crouch
+  f32 crouch_eye_height; // 0 -> eye_height lowered by (height - crouch_height)
+  f32 crouch_speed;      // m/s crouched (walk and run); 0 -> walk_speed / 2
+  f32 crouch_ease_s;     // seconds the eye takes to drop or rise; 0 -> 0.18
 };
 
 // the per-frame intent, written by the game
@@ -102,6 +106,7 @@ typedef struct CharacterInput {
   f32 heading;     // view yaw, radians: forward = (-sin, 0, -cos), right = (cos, 0, -sin)
   f32 face_yaw;    // CHARACTER_FACING_INPUT target, in the same convention as Character.yaw
   b32 run;
+  b32 crouch;      // held: crouch (CharacterTuning.crouch_height); stays crouched while there is no room to stand
   b32 jump;        // request, consumed on arming the jump buffer
   b32 teleport;    // consumed: place at teleport_pos at rest
   v3 teleport_pos; // feet
@@ -138,6 +143,8 @@ typedef struct Character {
   quat ground_body_rot;
   b32 ground_body_valid;
   b32 swimming;
+  b32 crouched;       // the capsule is at crouch_height
+  f32 crouch_k;       // 0 standing .. 1 crouched, eased over crouch_ease_s
   b32 running;        // run input applied while moving
   f32 coyote;
   f32 jump_buffer;
@@ -194,6 +201,8 @@ void character_schedule_frame(EcsWorld *w);
 
 // feet to head of the standing capsule, defaults resolved
 f32 character_stand_height(const CharacterTuning *tuning);
+// feet to eye now: eye_height eased toward crouch_eye_height by the crouch (resolved tuning; c may be NULL)
+f32 character_eye_height(const CharacterTuning *resolved, const Character *c);
 // tuning with every zero field replaced by its default
 CharacterTuning character_tuning_resolve(CharacterTuning t);
 // y of the first walkable surface at or below from_y (search up to max_drop); `fallback` when no layer is built or nothing is hit

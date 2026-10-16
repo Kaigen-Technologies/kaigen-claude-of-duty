@@ -152,6 +152,8 @@ typedef enum CwProtoId {
       CWP_COUNT,
 } CwProtoId;
 
+#define CW_PROTO_MAX_LODS 3
+
 typedef struct CwProto {
   b32 defined;
   CwGeo geo;
@@ -159,13 +161,28 @@ typedef struct CwProto {
   f32 tilt, sink, skirt, max_dist;
   b32 cast_shadow, receive_shadow;
   u32 count; // instances placed
+  f32 simplify;          // decimation error limit in metres (0 = the geometry as built)
+  CwSimplifyStats simp;  // what decimation did
+  u32 lod_count;         // levels including the source mesh
+  CwGeo lods[CW_PROTO_MAX_LODS - 1];                 // the coarser levels, each decimated from the previous
+  f32 lod_err[CW_PROTO_MAX_LODS];                    // metres of error against the source mesh, per level
+  CwSimplifyStats lod_simp[CW_PROTO_MAX_LODS - 1];   // what each coarser level's decimation did
+  HzHandleT(RendererSubMesh) lod_sub[CW_PROTO_MAX_LODS - 1];
 } CwProto;
 
 typedef struct CwProtoOpts {
   f32 tilt, sink, skirt, max_dist;
   b32 no_shadow;
   b32 no_receive;
+  f32 simplify; // decimation error limit in metres, under what the closest view resolves
+  f32 lod1, lod2; // decimation error limits in metres for the coarser levels (0 = none)
 } CwProtoOpts;
+
+hz_internal const char *const CW_PROTO_NAMES[] = {
+#define X(n) #n,
+    CW_PROTO_LIST(X)
+#undef X
+};
 
 // -------------------------------------------------------------- recording ---
 
@@ -375,11 +392,34 @@ hz_internal f32 cw_ry_of(m4 pm) { return m_atan2f(pm.m[2][0], pm.m[2][2]); }
 
 // ---- prop prototypes ----
 
+// appends a level decimated from the last one within max_error metres; kept only when it drops a quarter of the triangles
+hz_internal void cwa_proto_add_lod(CwA *A, CwProto *p, f32 max_error) {
+  if (max_error <= 0.0f || p->lod_count >= CW_PROTO_MAX_LODS)
+    return;
+  const CwGeo *prev = p->lod_count == 1 ? &p->geo : &p->lods[p->lod_count - 2];
+  CwGeo g = cw_geo_clone(&A->al, prev);
+  CwSimplifyStats st = cw_geo_simplify(&g, max_error);
+  if (st.tris_after * 4u > st.tris_before * 3u)
+    return;
+  p->lods[p->lod_count - 1] = g;
+  p->lod_simp[p->lod_count - 1] = st;
+  p->lod_err[p->lod_count] = p->lod_err[p->lod_count - 1] + st.error;
+  p->lod_count++;
+}
+
 hz_internal void cwa_proto(CwA *A, u32 id, CwGeo geo, u32 key, CwProtoOpts o) {
   CwProto *p = &A->protos[id];
   assert_msg(!p->defined, "cw proto registered twice");
   *p = (CwProto){.defined = true, .geo = geo, .key = key, .tilt = o.tilt, .sink = o.sink, .skirt = o.skirt, .max_dist = o.max_dist,
                  .cast_shadow = !o.no_shadow, .receive_shadow = !o.no_receive};
+  if (o.simplify > 0.0f) {
+    p->simplify = o.simplify;
+    p->simp = cw_geo_simplify(&p->geo, o.simplify);
+  }
+  p->lod_count = 1;
+  p->lod_err[0] = p->simp.error;
+  cwa_proto_add_lod(A, p, o.lod1);
+  cwa_proto_add_lod(A, p, o.lod2);
 }
 
 hz_internal void cwa_place(CwA *A, u32 id, v3 pos, f32 ry, f32 rx, f32 rz, v3 scale, const v3 *masks) {

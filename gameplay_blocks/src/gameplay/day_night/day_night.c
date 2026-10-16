@@ -50,6 +50,8 @@ DayNightBodies day_night_astronomy(const DayNightCycle *c) {
   // the moon on the ecliptic, its elongation east of the sun set by the phase (its 5 degree inclination left out)
   f32 phase = c->moon_phase - m_floorf(c->moon_phase);
   dn_ecliptic(sun_lon + 2.0f * (f32)M_PI * phase, &moon_ra, &moon_dec);
+  if (c->moon_declination_fixed)
+    moon_dec = m_radians(m_clampf(c->moon_declination_deg, -90.0f, 90.0f));
   // local sidereal angle: the sun's hour angle (0 at solar noon) plus its right ascension
   f32 sidereal = 2.0f * (f32)M_PI * (c->time_of_day - 12.0f) / 24.0f + sun_ra;
   // celestial -> world: the sky turns west about the pole, the pole tilts to the latitude, north turns by the yaw

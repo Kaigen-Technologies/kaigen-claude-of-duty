@@ -929,14 +929,14 @@ hz_internal void cw_register_props(CwA *A, CodRng *rng) {
   cwa_proto(A, CWP_BUCKET, cw_prop_bucket(A), CW_METAL_RUST_PROP, (CwProtoOpts){CW_LOOSE(0.12f, 0.008f)});
   cwa_proto(A, CWP_JERRY_CAN, cw_prop_jerry(A), CW_METAL_GREEN, (CwProtoOpts){CW_LOOSE(0.10f, 0.01f)});
 
-  cwa_proto(A, CWP_SANDBAG_A, cw_prop_sandbag(A, rng, 0), CW_BURLAP, (CwProtoOpts){CW_LOOSE(0.085f, 0.006f)});
-  cwa_proto(A, CWP_SANDBAG_B, cw_prop_sandbag(A, rng, 1), CW_BURLAP, (CwProtoOpts){CW_LOOSE(0.09f, 0.006f)});
-  cwa_proto(A, CWP_SANDBAG_C, cw_prop_sandbag(A, rng, 2), CW_BURLAP, (CwProtoOpts){CW_LOOSE(0.095f, 0.006f)});
+  cwa_proto(A, CWP_SANDBAG_A, cw_prop_sandbag(A, rng, 0), CW_BURLAP, (CwProtoOpts){CW_LOOSE(0.085f, 0.006f), .lod1 = 0.02f, .lod2 = 0.04f});
+  cwa_proto(A, CWP_SANDBAG_B, cw_prop_sandbag(A, rng, 1), CW_BURLAP, (CwProtoOpts){CW_LOOSE(0.09f, 0.006f), .lod1 = 0.02f, .lod2 = 0.04f});
+  cwa_proto(A, CWP_SANDBAG_C, cw_prop_sandbag(A, rng, 2), CW_BURLAP, (CwProtoOpts){CW_LOOSE(0.095f, 0.006f), .lod1 = 0.02f, .lod2 = 0.04f});
   cwa_proto(A, CWP_JERSEY, cw_prop_jersey(A), CW_CONCRETE_PROP, (CwProtoOpts){.skirt = 0.69f});
   cwa_proto(A, CWP_BLOCK_BIG, cw_prop_block(A, rng, 1.25f, 0.95f, 0.85f), CW_CONCRETE_PROP, (CwProtoOpts){.skirt = 0.63f, CW_LOOSE(0.05f, 0.03f)});
   cwa_proto(A, CWP_BLOCK_SMALL, cw_prop_block(A, rng, 0.55f, 0.42f, 0.4f), CW_CONCRETE_DARK, (CwProtoOpts){.skirt = 0.31f, CW_LOOSE(0.09f, 0.018f)});
-  cwa_proto(A, CWP_TYRE, cw_prop_tyre(A, rng, 0.33f), CW_RUBBER, (CwProtoOpts){.skirt = 0.33f, CW_LOOSE(0.10f, 0.008f)});
-  cwa_proto(A, CWP_TYRE_SMALL, cw_prop_tyre(A, rng, 0.26f), CW_RUBBER, (CwProtoOpts){CW_LOOSE(0.11f, 0.006f)});
+  cwa_proto(A, CWP_TYRE, cw_prop_tyre(A, rng, 0.33f), CW_RUBBER, (CwProtoOpts){.skirt = 0.33f, CW_LOOSE(0.10f, 0.008f), .lod1 = 0.005f, .lod2 = 0.02f});
+  cwa_proto(A, CWP_TYRE_SMALL, cw_prop_tyre(A, rng, 0.26f), CW_RUBBER, (CwProtoOpts){CW_LOOSE(0.11f, 0.006f), .simplify = 0.0005f, .lod1 = 0.005f, .lod2 = 0.02f});
   cwa_proto(A, CWP_PALLET, cw_prop_pallet(A, rng), CW_WOOD_PROP, (CwProtoOpts){.skirt = 0.51f, CW_LOOSE(0.055f, 0.02f)});
 
   cwa_proto(A, CWP_TABLE, cw_prop_table(A, 1.5f, 0.78f, 0.8f), CW_WOOD_PROP_DARK, (CwProtoOpts){.skirt = 0.57f});
@@ -948,7 +948,7 @@ hz_internal void cw_register_props(CwA *A, CodRng *rng) {
   cwa_proto(A, CWP_CABINET, cw_prop_cabinet(A), CW_WOOD_PROP_DARK, (CwProtoOpts){.skirt = 0.42f});
 
   cwa_proto(A, CWP_AC_UNIT, cw_prop_ac(A), CW_METAL_DARK, (CwProtoOpts){0});
-  cwa_proto(A, CWP_SAT_DISH, cw_prop_sat_dish(A), CW_METAL_DARK, (CwProtoOpts){0});
+  cwa_proto(A, CWP_SAT_DISH, cw_prop_sat_dish(A), CW_METAL_DARK, (CwProtoOpts){.simplify = 0.0005f, .lod1 = 0.01f, .lod2 = 0.04f});
   cwa_proto(A, CWP_WATER_TANK, cw_prop_water_tank(A), CW_METAL_BLUE, (CwProtoOpts){.skirt = 0.48f});
   cwa_proto(A, CWP_ROOF_VENT, cw_prop_roof_vent(A), CW_METAL_RUST, (CwProtoOpts){0});
   cwa_proto(A, CWP_LAMP_POST, cw_prop_street_lamp(A, 5.4f), CW_METAL_DARK, (CwProtoOpts){.skirt = 0.25f});
@@ -978,7 +978,7 @@ hz_internal void cw_register_props(CwA *A, CodRng *rng) {
   cwa_proto(A, CWP_SIGN_BOARD, cw_prop_sign_board(A, 1.6f, 0.55f), CW_METAL_BLUE, (CwProtoOpts){.skirt = 0.18f});
   cwa_proto(A, CWP_SIGN_HANG, cw_prop_sign_hang(A, 0.9f, 0.62f), CW_METAL_GREEN, (CwProtoOpts){0});
 
-  cwa_proto(A, CWP_POCK, cw_pock(&A->al, rng, 0.032f), CW_CONCRETE_DARK, (CwProtoOpts){.max_dist = 65, .no_shadow = true});
+  cwa_proto(A, CWP_POCK, cw_pock(&A->al, rng, 0.032f), CW_CONCRETE_DARK, (CwProtoOpts){.max_dist = 65, .no_shadow = true, .lod1 = 0.005f, .lod2 = 0.02f});
 
   // dressing props
   cwa_proto(A, CWP_WRECK, cw_prop_burnt_car(A), CW_METAL_DARK, (CwProtoOpts){0});
